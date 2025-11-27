@@ -1,6 +1,6 @@
 # CrossShot · 跨平台 UI 截图采集与对比
 
-English version: `README_EN.md`
+English version: [README_EN.md](README_EN.md)
 
 📱 **移动端硬件截图捕获** + 💻 **桌面端像素级对比** + 🔗 **零配置网络发现**
 
