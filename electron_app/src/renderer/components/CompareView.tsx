@@ -27,6 +27,7 @@ interface CompareViewProps {
 
 export interface CompareViewHandle {
   exportComposite: () => Promise<void>;
+  copyComposite: () => Promise<void>;
 }
 
 const clamp = (value: number): number => Math.min(1, Math.max(0, value));
@@ -54,66 +55,75 @@ const CompareView = forwardRef<CompareViewHandle, CompareViewProps>(
     const pair = useMemo(() => (screenshots.length === 2 ? [screenshots[0], screenshots[1]] : []), [screenshots]);
     const isReady = pair.length === 2;
 
+    const buildCompositeCanvas = async (): Promise<HTMLCanvasElement | null> => {
+      if (!isReady) {
+        window.alert('请选择两张截图后再执行该操作。');
+        return null;
+      }
+
+      const [first, second] = pair;
+      const [imgA, imgB] = await Promise.all([
+        loadImage(`file://${first.path}`),
+        loadImage(`file://${second.path}`),
+      ]);
+
+      const targetHeight = Math.max(imgA.naturalHeight, imgB.naturalHeight);
+      const scaleA = targetHeight / imgA.naturalHeight;
+      const scaleB = targetHeight / imgB.naturalHeight;
+      const widthA = Math.round(imgA.naturalWidth * scaleA);
+      const widthB = Math.round(imgB.naturalWidth * scaleB);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = widthA + widthB;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        throw new Error('Canvas API is not available');
+      }
+
+      ctx.fillStyle = '#0b1120';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(imgA, 0, 0, widthA, targetHeight);
+      ctx.drawImage(imgB, widthA, 0, widthB, targetHeight);
+
+      annotations.forEach((annotation, index) => {
+        const x = annotation.x * canvas.width;
+        const y = annotation.y * canvas.height;
+        const w = annotation.width * canvas.width;
+        const h = annotation.height * canvas.height;
+
+        ctx.strokeStyle = '#fb923c';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([16, 12]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.setLineDash([]);
+
+        const label = `${index + 1}`;
+        ctx.fillStyle = 'rgba(251, 146, 60, 0.92)';
+        ctx.fillRect(x, y - 32, Math.max(48, ctx.measureText(label).width + 24), 28);
+        ctx.fillStyle = '#0b1120';
+        ctx.font = '16px "Inter", sans-serif';
+        ctx.fillText(label, x + 12, y - 12);
+
+        if (annotation.note) {
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.fillRect(x, y + h + 6, Math.min(canvas.width - x - 8, 320), 34);
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = '15px "Inter", sans-serif';
+          ctx.fillText(annotation.note, x + 10, y + h + 30);
+        }
+      });
+
+      return canvas;
+    };
+
     useImperativeHandle(ref, () => ({
       exportComposite: async () => {
-        if (!isReady) {
-          window.alert('请选择两张截图后再导出合成图。');
+        const canvas = await buildCompositeCanvas();
+        if (!canvas) {
           return;
         }
-
-        const [first, second] = pair;
-        const [imgA, imgB] = await Promise.all([
-          loadImage(`file://${first.path}`),
-          loadImage(`file://${second.path}`),
-        ]);
-
-        const targetHeight = Math.max(imgA.naturalHeight, imgB.naturalHeight);
-        const scaleA = targetHeight / imgA.naturalHeight;
-        const scaleB = targetHeight / imgB.naturalHeight;
-        const widthA = Math.round(imgA.naturalWidth * scaleA);
-        const widthB = Math.round(imgB.naturalWidth * scaleB);
-
-        const canvas = document.createElement('canvas');
-        canvas.width = widthA + widthB;
-        canvas.height = targetHeight;
-        const ctx = canvas.getContext('2d');
-
-        if (!ctx) {
-          throw new Error('Canvas API is not available');
-        }
-
-        ctx.fillStyle = '#0b1120';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(imgA, 0, 0, widthA, targetHeight);
-        ctx.drawImage(imgB, widthA, 0, widthB, targetHeight);
-
-        annotations.forEach((annotation, index) => {
-          const x = annotation.x * canvas.width;
-          const y = annotation.y * canvas.height;
-          const w = annotation.width * canvas.width;
-          const h = annotation.height * canvas.height;
-
-          ctx.strokeStyle = '#fb923c';
-          ctx.lineWidth = 4;
-          ctx.setLineDash([16, 12]);
-          ctx.strokeRect(x, y, w, h);
-          ctx.setLineDash([]);
-
-          const label = `${index + 1}`;
-          ctx.fillStyle = 'rgba(251, 146, 60, 0.92)';
-          ctx.fillRect(x, y - 32, Math.max(48, ctx.measureText(label).width + 24), 28);
-          ctx.fillStyle = '#0b1120';
-          ctx.font = '16px "Inter", sans-serif';
-          ctx.fillText(label, x + 12, y - 12);
-
-          if (annotation.note) {
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-            ctx.fillRect(x, y + h + 6, Math.min(canvas.width - x - 8, 320), 34);
-            ctx.fillStyle = '#f8fafc';
-            ctx.font = '15px "Inter", sans-serif';
-            ctx.fillText(annotation.note, x + 10, y + h + 30);
-          }
-        });
 
         await new Promise<void>((resolve, reject) => {
           canvas.toBlob((blob) => {
@@ -129,6 +139,35 @@ const CompareView = forwardRef<CompareViewHandle, CompareViewProps>(
             link.click();
             URL.revokeObjectURL(url);
             resolve();
+          }, 'image/png');
+        });
+      },
+      copyComposite: async () => {
+        const canvas = await buildCompositeCanvas();
+        if (!canvas) {
+          return;
+        }
+
+        if (!navigator.clipboard || !('ClipboardItem' in window)) {
+          window.alert('当前环境不支持复制图片，请尝试保存后手动粘贴。');
+          return;
+        }
+
+        await new Promise<void>((resolve, reject) => {
+          canvas.toBlob(async (blob) => {
+            if (!blob) {
+              reject(new Error('复制失败，请重试'));
+              return;
+            }
+
+            try {
+              await navigator.clipboard.write([
+                new ClipboardItem({ 'image/png': blob }),
+              ]);
+              resolve();
+            } catch (error) {
+              reject(error instanceof Error ? error : new Error('复制失败'));
+            }
           }, 'image/png');
         });
       },

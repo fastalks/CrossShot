@@ -1,0 +1,169 @@
+.action-panel {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #e2e8f0;
+}
+
+.device-status-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.device-status-card {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(2, 6, 23, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-status-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.device-status-card__icon {
+  font-size: 24px;
+}
+
+.device-status-card strong {
+  margin: 0;
+  display: block;
+  font-size: 15px;
+}
+
+.device-status-card p {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.device-status-card__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.device-status-card__list li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #cbd5f5;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.device-status-card__list li small {
+  color: #94a3b8;
+}
+
+.device-status-card__empty {
+  text-align: center;
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.device-status-card.platform-android {
+  border-color: rgba(45, 212, 191, 0.4);
+}
+
+.device-status-card.platform-ios {
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.action-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.action-panel h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.action-panel p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.status-pill {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.status-pill.online {
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+}
+
+.action-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.action-panel button {
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid transparent;
+  background: rgba(30, 41, 59, 0.8);
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.action-panel button.primary {
+  background: linear-gradient(135deg, #2dd4bf, #0ea5e9);
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.action-panel button.danger {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
+.action-panel button.secondary {
+  background: rgba(88, 28, 135, 0.2);
+  border-color: rgba(217, 70, 239, 0.35);
+}
+
+.action-panel button.ghost {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.action-panel button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-panel footer {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+@media (max-width: 520px) {
+  .device-status-grid {
+    grid-template-columns: 1fr;
+  }
+}

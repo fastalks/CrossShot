@@ -13,11 +13,11 @@ const Header: React.FC<HeaderProps> = ({ total, selectedCount, canExport, onExpo
   return (
     <header className="header">
       <div className="brand">
-        <h1>CrossShot Studio</h1>
+        {/* <h1>CrossShot Studio</h1> */}
         <p>跨端截图 · 并排对比 · 快速标注</p>
       </div>
 
-      <div className="header-insights">
+      {/* <div className="header-insights">
         <div>
           <span className="label">已接收</span>
           <span className="value">{total}</span>
@@ -35,7 +35,7 @@ const Header: React.FC<HeaderProps> = ({ total, selectedCount, canExport, onExpo
         <button type="button" className="primary" onClick={onExport} disabled={!canExport}>
           导出合成图
         </button>
-      </div>
+      </div> */}
     </header>
   );
 };

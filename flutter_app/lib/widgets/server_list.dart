@@ -55,9 +55,22 @@ class ServerList extends StatelessWidget {
                         leading: const Icon(Icons.computer, color: Colors.blue),
                         title: Text(server['name'] ?? 'Unknown'),
                         subtitle: Text('${server['host']}:${server['port']}'),
-                        trailing: Icon(
-                          Icons.check_circle,
-                          color: isSelectable ? Colors.green : Colors.grey,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Online/offline indicator dot
+                            Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: server['online'] == 'true' ? Colors.green : Colors.grey,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (isSelectable)
+                              const Icon(Icons.chevron_right, color: Colors.blue),
+                          ],
                         ),
                         onTap: isSelectable
                             ? () {

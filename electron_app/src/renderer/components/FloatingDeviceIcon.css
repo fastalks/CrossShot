@@ -1,0 +1,5 @@
+.floating-device-icon{position:fixed;left:0;top:0;z-index:10000;user-select:none}
+.floating-device-icon .icon-row{display:flex;gap:8px;background:rgba(15,23,42,0.9);padding:8px;border-radius:8px;box-shadow:0 6px 18px rgba(2,6,23,0.5)}
+.floating-device-icon .icon{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:#fff;font-size:18px}
+.floating-device-icon .icon.disconnected{background:#6b7280;opacity:0.9}
+.floating-device-icon .icon.connected{background:#10b981;opacity:1}

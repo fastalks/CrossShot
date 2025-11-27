@@ -22,6 +22,9 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.animation.ValueAnimator
+import android.view.animation.DecelerateInterpolator
+import android.util.TypedValue
 import android.webkit.MimeTypeMap
 import android.widget.ImageView
 import androidx.core.app.NotificationCompat
@@ -51,6 +54,12 @@ class ScreenshotMonitorService : Service() {
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val lastHandledId = AtomicLong(-1)
     private val lastHandledUri = AtomicReference<String?>(null)
+    private val rawCopyMimeTypes = setOf(
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/webp",
+    )
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -117,6 +126,10 @@ class ScreenshotMonitorService : Service() {
 
         val inflater = LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.overlay_screenshot_button, null, false)
+        val prefs = getSharedPreferences("crossshot_overlay", Context.MODE_PRIVATE)
+        val savedX = prefs.getInt("overlay_x", Int.MIN_VALUE)
+        val savedY = prefs.getInt("overlay_y", Int.MIN_VALUE)
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -125,40 +138,119 @@ class ScreenshotMonitorService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            x = 48
-            y = 0
+            // Use top|start so x/y are measured from the top-left corner
+            gravity = Gravity.TOP or Gravity.START
+            // If saved position exists, restore it; otherwise use a reasonable default
+            x = if (savedX != Int.MIN_VALUE) savedX else 48
+            y = if (savedY != Int.MIN_VALUE) savedY else 200
         }
 
-        view.findViewById<ImageView>(R.id.overlayButton).setOnClickListener {
-            MainActivity.pushScreenshotEvent(mapOf("type" to "overlayTap"))
-        }
-
-        attachDragHandler(view, params)
+        val overlayButton = view.findViewById<ImageView>(R.id.overlayButton)
+        attachDragHandler(view, overlayButton, params)
 
         windowManager.addView(view, params)
         overlayView = view
     }
 
-    private fun attachDragHandler(view: View, params: WindowManager.LayoutParams) {
+    private fun attachDragHandler(parentView: View, touchView: View, params: WindowManager.LayoutParams) {
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
         var initialTouchY = 0f
+        var isClickCandidate = false
+        val prefs = getSharedPreferences("crossshot_overlay", Context.MODE_PRIVATE)
+        val thresholdPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 8f, resources.displayMetrics)
 
-        view.setOnTouchListener { _, event ->
+        touchView.isClickable = true
+        touchView.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = params.x
                     initialY = params.y
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
-                    false
+                    isClickCandidate = true
+                    Log.d(TAG, "overlay ACTION_DOWN x=${event.rawX}, y=${event.rawY}, params.x=${params.x}, params.y=${params.y}")
+                    true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    params.x = initialX + (initialTouchX - event.rawX).toInt()
-                    params.y = initialY + (event.rawY - initialTouchY).toInt()
-                    windowManager.updateViewLayout(view, params)
+                    val dx = event.rawX - initialTouchX
+                    val dy = event.rawY - initialTouchY
+                    if (isClickCandidate && (dx * dx + dy * dy) > thresholdPx * thresholdPx) {
+                        isClickCandidate = false
+                        Log.d(TAG, "overlay start drag (dx=$dx, dy=$dy)")
+                    }
+
+                    if (!isClickCandidate) {
+                        params.x = initialX + dx.toInt()
+                        params.y = initialY + dy.toInt()
+                        try {
+                            windowManager.updateViewLayout(parentView, params)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "updateViewLayout failed during move", e)
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    Log.d(TAG, "overlay ACTION_UP isClick=$isClickCandidate params.x=${params.x} params.y=${params.y}")
+                    if (isClickCandidate) {
+                        // treat as click
+                        MainActivity.pushScreenshotEvent(mapOf("type" to "overlayTap"))
+                        Log.d(TAG, "overlay tapped")
+                    } else {
+                        // snap to nearest horizontal edge with animation, then persist
+                        try {
+                            val metrics = resources.displayMetrics
+                            val screenWidth = metrics.widthPixels
+                            val viewWidth = if (parentView.width > 0) parentView.width else parentView.measuredWidth
+                            val marginDp = 16f
+                            val marginPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, marginDp, metrics).toInt()
+
+                            val centerX = params.x + viewWidth / 2
+                            val targetX = if (centerX >= screenWidth / 2) {
+                                // snap to right edge
+                                (screenWidth - viewWidth - marginPx).coerceAtLeast(marginPx)
+                            } else {
+                                // snap to left edge (margin)
+                                marginPx
+                            }
+
+                            // Animate from current x to targetX
+                            val animator = ValueAnimator.ofInt(params.x, targetX)
+                            animator.duration = 220
+                            animator.interpolator = DecelerateInterpolator()
+                            animator.addUpdateListener { animation ->
+                                params.x = animation.animatedValue as Int
+                                try {
+                                    windowManager.updateViewLayout(parentView, params)
+                                } catch (e: Exception) {
+                                    // ignore
+                                }
+                            }
+                            animator.start()
+
+                            // Save position after a small delay (duration)
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                try {
+                                    prefs.edit()
+                                        .putInt("overlay_x", params.x)
+                                        .putInt("overlay_y", params.y)
+                                        .apply()
+                                } catch (e: Exception) {
+                                    // ignore prefs errors
+                                }
+                            }, animator.duration)
+                        } catch (e: Exception) {
+                            try {
+                                prefs.edit()
+                                    .putInt("overlay_x", params.x)
+                                    .putInt("overlay_y", params.y)
+                                    .apply()
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
                     true
                 }
                 else -> false
@@ -312,35 +404,23 @@ class ScreenshotMonitorService : Service() {
     }
 
     private fun copyToCache(uri: Uri): File? {
-        val mimeType = contentResolver.getType(uri)
-        val cacheNamePng = "system_screenshot_${System.currentTimeMillis()}.png"
-        val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
-        val cacheNameRaw = "system_screenshot_${System.currentTimeMillis()}.${extension ?: "bin"}"
+        val mimeType = contentResolver.getType(uri)?.lowercase()
+        val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "bin"
+        val preferRawCopy = mimeType != null && rawCopyMimeTypes.contains(mimeType)
 
         repeat(5) { attempt ->
             try {
-                contentResolver.openInputStream(uri)?.use { input ->
-                    val decoded = BitmapFactory.decodeStream(input)
-                    if (decoded != null) {
-                        val file = File(cacheDir, cacheNamePng)
-                        FileOutputStream(file).use { output ->
-                            decoded.compress(Bitmap.CompressFormat.PNG, 100, output)
-                            output.flush()
-                        }
-                        return file
+                if (preferRawCopy) {
+                    rawCopy(uri, extension)?.let { file ->
+                        if (file.length() > 0) return file else file.delete()
+                    }
+                    encodeToPng(uri)?.let { return it }
+                } else {
+                    encodeToPng(uri)?.let { return it }
+                    rawCopy(uri, extension)?.let { file ->
+                        if (file.length() > 0) return file else file.delete()
                     }
                 }
-
-                // Fallback: raw copy if bitmap decode fails
-                contentResolver.openInputStream(uri)?.use { input ->
-                    val file = File(cacheDir, cacheNameRaw)
-                    FileOutputStream(file).use { output ->
-                        input.copyTo(output)
-                        output.flush()
-                    }
-                    return file
-                }
-                return null
             } catch (error: IllegalStateException) {
                 if (error.message?.contains("pending", ignoreCase = true) == true && attempt < 4) {
                     Thread.sleep(150)
@@ -351,6 +431,33 @@ class ScreenshotMonitorService : Service() {
             } catch (error: Throwable) {
                 Log.w(TAG, "copyToCache failed uri=$uri", error)
                 return null
+            }
+        }
+        return null
+    }
+
+    private fun rawCopy(uri: Uri, extension: String): File? {
+        contentResolver.openInputStream(uri)?.use { input ->
+            val file = File(cacheDir, "system_screenshot_${System.currentTimeMillis()}.$extension")
+            FileOutputStream(file).use { output ->
+                input.copyTo(output)
+                output.flush()
+            }
+            return file
+        }
+        return null
+    }
+
+    private fun encodeToPng(uri: Uri): File? {
+        contentResolver.openInputStream(uri)?.use { input ->
+            val decoded = BitmapFactory.decodeStream(input)
+            if (decoded != null) {
+                val file = File(cacheDir, "system_screenshot_${System.currentTimeMillis()}.png")
+                FileOutputStream(file).use { output ->
+                    decoded.compress(Bitmap.CompressFormat.PNG, 100, output)
+                    output.flush()
+                }
+                return file
             }
         }
         return null

@@ -4,7 +4,7 @@ import '../providers/device_provider.dart';
 import '../services/mdns_service.dart';
 import '../services/screenshot_service.dart';
 import '../widgets/device_info_card.dart';
-import '../widgets/screenshot_button.dart';
+// screenshot button removed; uploads handled via overlay/service
 import '../widgets/server_list.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -17,7 +17,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late MDNSService _mdnsService;
   late ScreenshotService _screenshotService;
-  bool _isSearching = false;
+  
   Map<String, String>? _selectedServer;
   bool _monitoring = false;
 
@@ -27,6 +27,53 @@ class _HomeScreenState extends State<HomeScreen> {
     _mdnsService = context.read<MDNSService>();
     _screenshotService = Provider.of<ScreenshotService>(context, listen: false);
     _initializeServices();
+    // Listen for discovered servers updates to auto-select the first one
+    _mdnsService.addListener(_handleMdnsUpdates);
+  }
+
+  void _handleMdnsUpdates() {
+    if (!mounted) return;
+    final discovered = _mdnsService.discoveredServers;
+    // If user hasn't selected a server yet and discovery found at least one, auto-select first
+    if (!_monitoring && _selectedServer == null && discovered.isNotEmpty) {
+      final first = discovered.first;
+      setState(() {
+        _selectedServer = first;
+      });
+
+      // If there is only one discovered server, auto-start monitoring
+      if (discovered.length == 1) {
+        final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+        try {
+          _screenshotService.startMonitoring(
+            host: first['host']!,
+            port: int.parse(first['port']!),
+            deviceInfo: deviceProvider.deviceInfo,
+          ).then((_) {
+            if (mounted) {
+              setState(() {
+                _monitoring = true;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('已自动开始监听（仅发现一个服务）')),
+              );
+            }
+          }).catchError((e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('自动开始监听失败: $e')),
+              );
+            }
+          });
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('自动开始监听失败: $e')),
+            );
+          }
+        }
+      }
+    }
   }
 
   Future<void> _initializeServices() async {
@@ -35,63 +82,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _mdnsService.removeListener(_handleMdnsUpdates);
     _mdnsService.stopDiscovery(notifyListenersOnClear: false);
     super.dispose();
   }
 
-  Future<void> _captureAndUpload() async {
-    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-    
-    if (_mdnsService.discoveredServers.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('未发现PC端服务，请确保PC端应用已启动')),
-        );
-      }
-      return;
-    }
-
-    if (_selectedServer == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请先选择一个PC端服务')),
-        );
-      }
-      return;
-    }
-
-    setState(() => _isSearching = true);
-
-    try {
-      final screenshot = await _screenshotService.captureScreen();
-      if (screenshot != null) {
-        final server = _selectedServer!;
-        final success = await _screenshotService.uploadScreenshot(
-          screenshot,
-          server['host']!,
-          int.parse(server['port']!),
-          deviceProvider.deviceInfo,
-        );
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(success ? '截图上传成功！' : '截图上传失败'),
-              backgroundColor: success ? Colors.green : Colors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('错误: $e')),
-        );
-      }
-    } finally {
-      setState(() => _isSearching = false);
-    }
-  }
+  
 
   @override
   Widget build(BuildContext context) {
@@ -146,10 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      floatingActionButton: ScreenshotButton(
-        onPressed: _captureAndUpload,
-        isLoading: _isSearching,
-      ),
+      // screenshot floating button removed for auto-listen flow
     );
   }
 }

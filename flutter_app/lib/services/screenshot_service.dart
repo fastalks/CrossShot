@@ -1,6 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
@@ -15,6 +20,8 @@ class ScreenshotService {
   String? _monitorHost;
   int? _monitorPort;
   Map<String, dynamic>? _monitorDeviceInfo;
+  String? _monitorDeviceId;
+  Timer? _heartbeatTimer;
   bool _monitoring = false;
 
   /// 捕获屏幕截图
@@ -138,6 +145,18 @@ class ScreenshotService {
         onError: (error) => print('监听事件失败: $error'),
       );
       _monitoring = true;
+
+      // announce to desktop so it can show device connected immediately
+      unawaited(_announceDevice(host, port));
+      // start heartbeat timer (every 5s)
+      try {
+        _heartbeatTimer?.cancel();
+        _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+          await _sendHeartbeat();
+        });
+      } catch (e) {
+        print('Failed to start heartbeat timer: $e');
+      }
     } catch (e) {
       print('启动监听服务失败: $e');
       rethrow;
@@ -187,6 +206,12 @@ class ScreenshotService {
     }
     await _eventSubscription?.cancel();
     _eventSubscription = null;
+    // stop heartbeat timer, then notify desktop that we stopped monitoring
+    try {
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = null;
+    } catch (_) {}
+    unawaited(_announceStop());
     _monitoring = false;
   }
 
@@ -253,6 +278,39 @@ class ScreenshotService {
     Map<String, dynamic> deviceInfo,
   ) async {
     try {
+      // If a proxy is configured in preferences, send via WebSocket to proxy
+      final prefs = await SharedPreferences.getInstance();
+      final proxyHost = prefs.getString('proxy_host');
+      final proxyPort = prefs.getInt('proxy_port');
+
+      if (proxyHost != null && proxyPort != null) {
+        final uri = Uri.parse('ws://$proxyHost:$proxyPort/proxy-upload');
+        final channel = IOWebSocketChannel.connect(uri.toString());
+
+        final header = {
+          'filename': path.basename(screenshot.path),
+          'deviceInfo': deviceInfo,
+          'timestamp': DateTime.now().toIso8601String(),
+          // optional: targetPeerId could be provided by user in UI
+        };
+
+        final bytes = await screenshot.readAsBytes();
+        final payload = <int>[];
+        payload.addAll(headerToBytes(header));
+        payload.addAll([0x0a]); // newline separator
+        payload.addAll(bytes);
+
+        channel.sink.add(Uint8List.fromList(payload));
+        // wait for a response (optional)
+        final future = channel.stream.first.timeout(const Duration(seconds: 8));
+        try {
+          await future;
+          // ignore response content for now
+        } catch (_) {}
+        await channel.sink.close();
+        return true;
+      }
+
       final formData = FormData.fromMap({
         'screenshot': await MultipartFile.fromFile(
           screenshot.path,
@@ -275,5 +333,71 @@ class ScreenshotService {
       print('上传失败: $e');
       return false;
     }
+  }
+
+  Future<void> _announceDevice(String host, int port) async {
+    try {
+      // try to build a stable device id from available info
+      String deviceId = 'unknown-${DateTime.now().millisecondsSinceEpoch}';
+      if (_monitorDeviceInfo != null) {
+        if (_monitorDeviceInfo!['device'] != null) {
+          deviceId = _monitorDeviceInfo!['device'].toString();
+        } else if (_monitorDeviceInfo!['identifierForVendor'] != null) {
+          deviceId = _monitorDeviceInfo!['identifierForVendor'].toString();
+        } else if (_monitorDeviceInfo!['model'] != null) {
+          deviceId = '${_monitorDeviceInfo!['model']}-${_monitorDeviceInfo!['sdkInt'] ?? ''}';
+        }
+      }
+
+      // persist computed device id for later stop notifications
+      _monitorDeviceId = deviceId;
+
+      final body = {
+        'platform': 'android',
+        'deviceId': deviceId,
+        'deviceInfo': _monitorDeviceInfo,
+      };
+
+      await _dio.post('http://$host:$port/api/announce', data: body);
+      print('[CrossShot] Announced device to $host:$port');
+    } catch (e) {
+      print('[CrossShot] Announce failed: $e');
+    }
+  }
+
+  Future<void> _announceStop() async {
+    try {
+      if (_monitorHost == null || _monitorPort == null) return;
+      final deviceId = _monitorDeviceId ?? 'unknown';
+      final body = {'platform': 'android', 'deviceId': deviceId};
+      await _dio.post('http://${_monitorHost!}:${_monitorPort!}/api/announce/stop', data: body);
+      print('[CrossShot] Announce stop to ${_monitorHost}:${_monitorPort}');
+    } catch (e) {
+      print('[CrossShot] Announce stop failed: $e');
+    }
+  }
+
+  Future<void> _sendHeartbeat() async {
+    try {
+      if (_monitorHost == null || _monitorPort == null) return;
+      final deviceId = _monitorDeviceId ?? 'unknown';
+      final body = {'platform': 'android', 'deviceId': deviceId, 'deviceInfo': _monitorDeviceInfo};
+      await _dio.post('http://${_monitorHost!}:${_monitorPort!}/api/heartbeat', data: body);
+      // debug
+      // print('[CrossShot] Heartbeat sent to ${_monitorHost}:${_monitorPort}');
+    } catch (e) {
+      print('[CrossShot] Heartbeat failed: $e');
+    }
+  }
+
+  Uint8List headerToBytes(Map<String, dynamic> header) {
+    final json = jsonEncode(header);
+    return Uint8List.fromList(utf8.encode(json));
+  }
+
+  Future<void> setUploadProxy(String host, int port) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('proxy_host', host);
+    await prefs.setInt('proxy_port', port);
   }
 }
