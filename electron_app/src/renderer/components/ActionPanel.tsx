@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import qrcode from 'qrcode';
 import type { DevicePlatform } from './DevicePanel';
 import './ActionPanel.css';
 
@@ -23,7 +24,8 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   onCopyComposite,
   platformSummaries,
 }: ActionPanelProps) => {
-  const [sessions, setSessions] = useState<{ android: string | null; ios: string | null }>({ android: null, ios: null });
+  const [sessions, setSessions] = useState<any>({ android: null, ios: null });
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let unsub: (() => void) | null = null;
@@ -39,6 +41,20 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       window.crossShotApi.getDeviceSessions().then((s) => setSessions(s)).catch(() => {});
     } catch (_) {}
 
+    // generate pairing QR once (used when no device connected)
+    try {
+      window.crossShotApi.getServerUrl().then((url) => {
+        if (!url) return;
+        qrcode
+          .toDataURL(url)
+          .then((data: string) => setQrDataUrl(data))
+          .catch((e: any) => {
+            console.error('生成 QR 失败', e);
+            setQrDataUrl(null);
+          });
+      }).catch(() => {});
+    } catch (_) {}
+
     return () => {
       try {
         if (unsub) unsub();
@@ -48,13 +64,31 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
 
   const DeviceConnectionIndicator: React.FC = () => {
     const androidActive = !!sessions.android;
-    const title = androidActive ? 'Android 已连接' : 'Android 未连接';
-    const color = androidActive ? '#2ecc71' : '#bdc3c7';
-    const deviceLabel = androidActive ? sessions.android ?? '已连接设备' : '未连接';
+    if (!androidActive) return null;
+    const title = 'Android 已连接';
+    const color = '#2ecc71';
+    // prefer a human-friendly name if provided in deviceInfo, otherwise show device id
+    const deviceLabel = (sessions.deviceInfo && sessions.deviceInfo.model) ? `${sessions.deviceInfo.manufacturer ?? ''} ${sessions.deviceInfo.model ?? ''}`.trim() : (sessions.android ?? '已连接设备');
     return (
       <div title={title} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ width: 10, height: 10, borderRadius: 6, background: color, boxShadow: androidActive ? '0 0 6px rgba(46, 204, 113, 0.6)' : 'none' }} />
-        <div style={{ fontSize: 12, color: androidActive ? '#ffffff' : '#7f8c8d', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ width: 10, height: 10, borderRadius: 6, background: color, boxShadow: '0 0 6px rgba(46, 204, 113, 0.6)' }} />
+        <div style={{ fontSize: 12, color: '#ffffff', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {deviceLabel}
+        </div>
+      </div>
+    );
+  };
+  const IOSConnectionIndicator: React.FC = () => {
+    const iosActive = !!sessions.ios;
+    if (!iosActive) return null;
+    const title = 'iOS 已连接';
+    const color = '#2ecc71';
+    // For iOS, prefer the device 'name' field and do NOT display the UUID (identifierForVendor)
+    const deviceLabel = (sessions.deviceInfo && sessions.deviceInfo.name) ? sessions.deviceInfo.name : (sessions.ios ?? '已连接 iOS');
+    return (
+      <div title={title} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width: 10, height: 10, borderRadius: 6, background: color, boxShadow: '0 0 6px rgba(46, 204, 113, 0.6)' }} />
+        <div style={{ fontSize: 12, color: '#ffffff', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {deviceLabel}
         </div>
       </div>
@@ -76,14 +110,45 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
         {platformSummaries.map((summary) => (
           <div key={summary.platform} className={`device-status-card platform-${summary.platform}`}>
             <div className="device-status-card__head">
-              <span className="device-status-card__icon">{platformEmoji[summary.platform]}</span>
+              {summary.platform === 'android' && sessions.android ? (
+                <span className="device-status-card__icon">{platformEmoji[summary.platform]}</span>
+              ) : null}
+              {summary.platform === 'ios' && sessions.ios ? (
+                <span className="device-status-card__icon">{platformEmoji[summary.platform]}</span>
+              ) : null}
               <div>
                 <strong>{platformLabel[summary.platform]}</strong>
               </div>
-              {/* Online indicator for Android */}
+
+              {/* show connection indicator when connected, otherwise show QR pairing hint */}
               {summary.platform === 'android' && (
                 <div style={{ marginLeft: 12 }}>
-                  <DeviceConnectionIndicator />
+                  {sessions.android ? (
+                    <DeviceConnectionIndicator />
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {qrDataUrl ? (
+                        <img src={qrDataUrl} alt="pair-qr-android" style={{ width: 84, height: 84, borderRadius: 6, background: '#fff' }} />
+                      ) : (
+                        <div style={{ width: 84, height: 84, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f4f6f8', borderRadius: 6, color: '#7f8c8d' }}>QR</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {summary.platform === 'ios' && (
+                <div style={{ marginLeft: 12 }}>
+                  {sessions.ios ? (
+                    <IOSConnectionIndicator />
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {qrDataUrl ? (
+                        <img src={qrDataUrl} alt="pair-qr-ios" style={{ width: 84, height: 84, borderRadius: 6, background: '#fff' }} />
+                      ) : (
+                        <div style={{ width: 84, height: 84, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f4f6f8', borderRadius: 6, color: '#7f8c8d' }}>QR</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -143,8 +208,11 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       <footer>
         <small>提示：设备实时同步中</small>
       </footer>
+      {/* QR modal removed; QR shown inline when no device connected */}
     </div>
   );
 };
 
 export default ActionPanel;
+
+// QR modal removed; QR is shown inline in the panel when no device connected

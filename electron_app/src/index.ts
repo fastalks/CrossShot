@@ -282,3 +282,25 @@ ipcMain.handle('stopListen', (event, platform: 'android' | 'ios', deviceId: stri
 ipcMain.handle('getDeviceSessions', async () => {
   return { ...deviceSessions };
 });
+
+// 返回本机可用于访问服务的 URL（首选局域网 IPv4）
+ipcMain.handle('get-server-url', async () => {
+  try {
+    const ifaces = os.networkInterfaces();
+    let address: string | null = null;
+    for (const name of Object.keys(ifaces)) {
+      const nets = ifaces[name] || [];
+      for (const net of nets) {
+        if (net.family === 'IPv4' && !net.internal) {
+          address = net.address;
+          break;
+        }
+      }
+      if (address) break;
+    }
+    if (!address) address = '127.0.0.1';
+    return `http://${address}:${SERVER_PORT}`;
+  } catch (e) {
+    return `http://127.0.0.1:${SERVER_PORT}`;
+  }
+});

@@ -10,8 +10,9 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/foundation.dart';
 
-class ScreenshotService {
+class ScreenshotService extends ChangeNotifier {
   final Dio _dio = Dio();
   static const MethodChannel _methodChannel = MethodChannel('crossshot/screenshot');
   static const EventChannel _eventChannel = EventChannel('crossshot/screenshot_events');
@@ -20,9 +21,16 @@ class ScreenshotService {
   String? _monitorHost;
   int? _monitorPort;
   Map<String, dynamic>? _monitorDeviceInfo;
+  Map<String, dynamic>? _monitorServerInfo;
   String? _monitorDeviceId;
   Timer? _heartbeatTimer;
   bool _monitoring = false;
+
+  // Expose monitoring state and info to UI
+  bool get isMonitoring => _monitoring;
+  String? get monitorHost => _monitorHost;
+  int? get monitorPort => _monitorPort;
+  Map<String, dynamic>? get monitorServerInfo => _monitorServerInfo;
 
   /// 捕获屏幕截图
   Future<File?> captureScreen() async {
@@ -113,11 +121,22 @@ class ScreenshotService {
     required String host,
     required int port,
     required Map<String, dynamic> deviceInfo,
+    Map<String, dynamic>? serverInfo,
+    String? deviceId,
   }) async {
     _monitorHost = host;
     _monitorPort = port;
-    _monitorDeviceInfo = Map<String, dynamic>.from(deviceInfo)
-      ..putIfAbsent('platform', () => 'Android');
+    // copy and sanitize deviceInfo: do not keep identifierForVendor (UUID) in the payload
+    final sanitized = Map<String, dynamic>.from(deviceInfo);
+    // if (sanitized.containsKey('identifierForVendor')) sanitized.remove('identifierForVendor');
+    // ensure platform field is present and correct
+    sanitized.putIfAbsent('platform', () => (Platform.isIOS ? 'iOS' : 'Android'));
+    _monitorDeviceInfo = sanitized;
+    // If caller provided an explicit deviceId (e.g. iOS identifierForVendor from QR announce), persist it
+    if (deviceId != null && deviceId.isNotEmpty) {
+      _monitorDeviceId = deviceId;
+    }
+    _monitorServerInfo = serverInfo;
 
     if (_monitoring) {
       return;
@@ -145,6 +164,7 @@ class ScreenshotService {
         onError: (error) => print('监听事件失败: $error'),
       );
       _monitoring = true;
+      notifyListeners();
 
       // announce to desktop so it can show device connected immediately
       unawaited(_announceDevice(host, port));
@@ -213,6 +233,10 @@ class ScreenshotService {
     } catch (_) {}
     unawaited(_announceStop());
     _monitoring = false;
+    _monitorHost = null;
+    _monitorPort = null;
+    _monitorServerInfo = null;
+    notifyListeners();
   }
 
   Future<void> _handleMonitorEvent(dynamic event) async {
@@ -338,25 +362,20 @@ class ScreenshotService {
   Future<void> _announceDevice(String host, int port) async {
     try {
       // try to build a stable device id from available info
-      String deviceId = 'unknown-${DateTime.now().millisecondsSinceEpoch}';
-      if (_monitorDeviceInfo != null) {
+      // prefer previously-provided device id (from QR announce). Otherwise compute a fallback.
+      String deviceId = _monitorDeviceId ?? 'unknown-${DateTime.now().millisecondsSinceEpoch}';
+      if (_monitorDeviceId == null && _monitorDeviceInfo != null) {
         if (_monitorDeviceInfo!['device'] != null) {
           deviceId = _monitorDeviceInfo!['device'].toString();
-        } else if (_monitorDeviceInfo!['identifierForVendor'] != null) {
-          deviceId = _monitorDeviceInfo!['identifierForVendor'].toString();
         } else if (_monitorDeviceInfo!['model'] != null) {
           deviceId = '${_monitorDeviceInfo!['model']}-${_monitorDeviceInfo!['sdkInt'] ?? ''}';
         }
+        // persist computed device id for later stop notifications
+        _monitorDeviceId = deviceId;
       }
 
-      // persist computed device id for later stop notifications
-      _monitorDeviceId = deviceId;
-
-      final body = {
-        'platform': 'android',
-        'deviceId': deviceId,
-        'deviceInfo': _monitorDeviceInfo,
-      };
+      final platform = Platform.isIOS ? 'ios' : 'android';
+      final body = {'platform': platform, 'deviceId': deviceId, 'deviceInfo': _monitorDeviceInfo};
 
       await _dio.post('http://$host:$port/api/announce', data: body);
       print('[CrossShot] Announced device to $host:$port');
@@ -369,7 +388,8 @@ class ScreenshotService {
     try {
       if (_monitorHost == null || _monitorPort == null) return;
       final deviceId = _monitorDeviceId ?? 'unknown';
-      final body = {'platform': 'android', 'deviceId': deviceId};
+      final platform = Platform.isIOS ? 'ios' : 'android';
+      final body = {'platform': platform, 'deviceId': deviceId};
       await _dio.post('http://${_monitorHost!}:${_monitorPort!}/api/announce/stop', data: body);
       print('[CrossShot] Announce stop to ${_monitorHost}:${_monitorPort}');
     } catch (e) {
@@ -381,7 +401,8 @@ class ScreenshotService {
     try {
       if (_monitorHost == null || _monitorPort == null) return;
       final deviceId = _monitorDeviceId ?? 'unknown';
-      final body = {'platform': 'android', 'deviceId': deviceId, 'deviceInfo': _monitorDeviceInfo};
+      final platform = Platform.isIOS ? 'ios' : 'android';
+      final body = {'platform': platform, 'deviceId': deviceId, 'deviceInfo': _monitorDeviceInfo};
       await _dio.post('http://${_monitorHost!}:${_monitorPort!}/api/heartbeat', data: body);
       // debug
       // print('[CrossShot] Heartbeat sent to ${_monitorHost}:${_monitorPort}');

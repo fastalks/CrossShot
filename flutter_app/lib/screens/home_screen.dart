@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'qr_scanner_screen.dart';
 import '../providers/device_provider.dart';
 import '../services/mdns_service.dart';
 import '../services/screenshot_service.dart';
@@ -45,11 +46,13 @@ class _HomeScreenState extends State<HomeScreen> {
       if (discovered.length == 1) {
         final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
         try {
+          final sentInfo = Map<String, dynamic>.from(deviceProvider.deviceInfo);
+          if (sentInfo.containsKey('identifierForVendor')) sentInfo.remove('identifierForVendor');
           _screenshotService.startMonitoring(
-            host: first['host']!,
-            port: int.parse(first['port']!),
-            deviceInfo: deviceProvider.deviceInfo,
-          ).then((_) {
+              host: first['host']!,
+              port: int.parse(first['port']!),
+              deviceInfo: sentInfo,
+            ).then((_) {
             if (mounted) {
               setState(() {
                 _monitoring = true;
@@ -95,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('CrossShot Mobile'),
+        title: const Text('CrossShot'),
         elevation: 2,
       ),
       body: SafeArea(
@@ -103,46 +106,108 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const DeviceInfoCard(),
             const Divider(),
-            Expanded(
-              child: ServerList(
-                servers: discoveredServers,
-                onSelect: (server) async {
-                  setState(() {
-                    _selectedServer = server;
-                  });
+            // show connected PC info when monitoring
+            Consumer<ScreenshotService>(builder: (context, ss, _) {
+              if (ss.isMonitoring) {
+                final host = ss.monitorHost ?? '';
+                final port = ss.monitorPort?.toString() ?? '';
+                final svc = ss.monitorServerInfo;
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('已连接桌面', style: TextStyle(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              Text('地址：$host${port.isNotEmpty ? ':$port' : ''}'),
+                              if (svc != null) ...[
+                                const SizedBox(height: 4),
+                                Text('服务：${svc['service'] ?? 'CrossShot Desktop'}'),
+                                Text('版本：${svc['version'] ?? ''}'),
+                              ],
+                            ],
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            try {
+                              await ss.stopMonitoring();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已断开连接')));
+                              }
+                            } catch (e) {
+                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('断开连接失败: $e')));
+                            }
+                          },
+                          child: const Text('断开连接'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
 
-                  if (!_monitoring) {
-                    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+              // otherwise show server list
+              return Expanded(
+                child: ServerList(
+                  servers: discoveredServers,
+                  onSelect: (server) async {
+                    setState(() {
+                      _selectedServer = server;
+                    });
 
-                    try {
-                      await _screenshotService.startMonitoring(
-                        host: server['host']!,
-                        port: int.parse(server['port']!),
-                        deviceInfo: deviceProvider.deviceInfo,
-                      );
-                      if (mounted) {
-                        setState(() {
-                          _monitoring = true;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('开始监听截图并显示浮窗')),
+                    if (!_monitoring) {
+                      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+
+                      try {
+                        final sentInfo = Map<String, dynamic>.from(deviceProvider.deviceInfo);
+                        if (sentInfo.containsKey('identifierForVendor')) sentInfo.remove('identifierForVendor');
+                        await _screenshotService.startMonitoring(
+                          host: server['host']!,
+                          port: int.parse(server['port']!),
+                          deviceInfo: sentInfo,
                         );
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('开启监听失败: $e')),
-                        );
+                        if (mounted) {
+                          setState(() {
+                            _monitoring = true;
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('开始监听截图并显示浮窗')),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('开启监听失败: $e')),
+                          );
+                        }
                       }
                     }
-                  }
-                },
-              ),
-            ),
+                  },
+                ),
+              );
+            }),
           ],
         ),
       ),
-      // screenshot floating button removed for auto-listen flow
+      // FAB: show on all platforms to allow QR pairing
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.qr_code_scanner),
+        label: const Text('扫码配对'),
+        onPressed: () async {
+          final res = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => const QRScannerScreen()));
+          if (res == true) {
+            // user paired via QR
+          }
+        },
+      ),
     );
   }
 }
+
+

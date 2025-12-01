@@ -41,6 +41,9 @@ const api = {
 	getDeviceSessions: (): Promise<{ android: string | null; ios: string | null }> =>
 		ipcRenderer.invoke('getDeviceSessions'),
 
+	// 返回桌面服务 URL（用于 QR 配对）
+	getServerUrl: (): Promise<string> => ipcRenderer.invoke('get-server-url'),
+
 	// proxy list management
 	getProxies: (): Promise<Array<{ host: string; port: number; name?: string }>> => ipcRenderer.invoke('get-proxies'),
 	addProxy: (proxy: { host: string; port: number; name?: string }) => ipcRenderer.invoke('add-proxy', proxy),

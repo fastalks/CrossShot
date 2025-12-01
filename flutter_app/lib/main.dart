@@ -18,7 +18,7 @@ class CrossShotApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => DeviceProvider()),
         ChangeNotifierProvider(create: (_) => MDNSService()),
-        Provider(create: (_) => ScreenshotService()),
+        ChangeNotifierProvider(create: (_) => ScreenshotService()),
       ],
       child: MaterialApp(
         title: 'CrossShot Mobile',
