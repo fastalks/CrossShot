@@ -25,7 +25,7 @@ CrossShot targets mobile UI automation scenarios: an Android foreground service 
 
 - Mobile (Flutter)
   - Android foreground service listens to MediaStore screenshots and provides a floating button for manual capture
-  - mDNS (NSD) for automatic discovery of desktop services on the same LAN
+  - QR pairing: the mobile app scans the QR displayed by the desktop. The app first verifies reachability and token via `GET /health`, then calls `POST /api/announce` to complete pairing and start heartbeats (`/api/heartbeat`). On iOS, nsd/mDNS discovery is not used by default.
   - Robust re-encoding & retry logic to ensure screenshots are fully written before upload
   - Uploads performed with Dio and automatic handling of permissions and network conditions
 
@@ -36,10 +36,10 @@ CrossShot targets mobile UI automation scenarios: an Android foreground service 
   - Renderer reads screenshots via IPC (avoids `file://` restrictions)
   - Batch select, delete, and timeline views
 
-- Communication
-  - mDNS service name: `_crossshot._tcp`
+ - Communication / Pairing
+  - Pairing: QR scan — the mobile app scans a QR displayed by the desktop, verifies it with `GET /health` and completes pairing with `POST /api/announce`. On iOS, mDNS/NSD discovery is not used by default.
   - HTTP REST endpoints for upload / list / delete
-  - Zero-config: devices on same subnet can communicate without manual setup
+  - Zero-config behavior: devices on same subnet can communicate after pairing
 
 ## Repository structure
 

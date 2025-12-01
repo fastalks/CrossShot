@@ -27,7 +27,7 @@ CrossShot 面向移动端 UI 自动化测试场景：Android 前台服务实时�
 
 - **移动端 (Flutter)**
   - Android 前台服务监听 MediaStore 截图 & 浮窗按钮手动触发
-  - mDNS (NSD) 自动发现局域网内的桌面端服务
+  - 二维码（QR）配对：移动端扫描桌面端展示的 QR，先通过 `GET /health` 验证可达性及 token，然后调用 `POST /api/announce` 完成配对并开始心跳（`/api/heartbeat`）。iOS 端默认不再依赖 mDNS/NSD 进行主动发现。
   - 多重重试+PNG 重新编码，确保系统截图写入完成后再上传
   - Dio 上传 + 权限、网络状态自动处理
 
@@ -38,8 +38,8 @@ CrossShot 面向移动端 UI 自动化测试场景：Android 前台服务实时�
   - React Renderer 通过 IPC 流化读取截图，规避 `file://` 访问限制
   - 批量选择、删除、时间轴视图
 
-- **通信链路**
-  - mDNS 服务名：`_crossshot._tcp`
+- **通信链路（配对说明）**
+- 配对方式：二维码（QR）配对。移动端扫描桌面端展示的 QR，先通过 `GET /health` 验证可达性与 token，成功后调用 `POST /api/announce` 完成配对并开始心跳（`/api/heartbeat`）。iOS 默认不使用 mDNS/NSD 进行主动发现。
   - HTTP REST 上传/列表/删除接口
   - 跨平台零配置：同网段即可互通
 
