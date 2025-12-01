@@ -1,0 +1,72 @@
+name: Build Electron release artifacts
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: |
+          cd electron_app
+          npm ci
+      - name: Build Electron (Linux)
+        run: |
+          cd electron_app
+          npm run dist
+      - name: Upload artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          files: electron_app/dist/**/*
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: |
+          cd electron_app
+          npm ci
+      - name: Build Electron (Windows)
+        run: |
+          cd electron_app
+          npm run dist
+      - name: Upload artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          files: electron_app/dist/**/*
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: |
+          cd electron_app
+          npm ci
+      - name: Build Electron (macOS)
+        run: |
+          cd electron_app
+          npm run dist
+      - name: Upload artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          files: electron_app/dist/**/*
