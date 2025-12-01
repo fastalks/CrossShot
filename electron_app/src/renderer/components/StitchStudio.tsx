@@ -451,7 +451,9 @@ const StitchStudio = forwardRef<StitchStudioHandle, StitchStudioProps>(({ screen
                                             border: '2px solid red',
                                             boxSizing: 'border-box',
                                             pointerEvents: 'none',
-                                            transform: 'translate(0, 0)'
+                                            transform: 'translate(0, 0)',
+                                            zIndex: 9999,
+                                            WebkitTransform: 'translate(0, 0)'
                                         }}
                                     />
                                 ))}

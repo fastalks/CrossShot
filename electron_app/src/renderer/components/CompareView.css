@@ -154,3 +154,75 @@
   gap: 12px;
   color: rgba(148, 163, 184, 0.92);
 }
+
+/* Canvas stage & overlay styles: ensure overlay stays on top of images */
+.canvas-stage {
+  position: relative;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+/* Create an isolated stacking context so overlay z-index is reliable */
+.canvas-stage {
+  isolation: isolate;
+}
+
+.canvas-images {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  position: relative;
+  z-index: 0; /* keep images below overlay */
+}
+
+.canvas-images img {
+  display: block;
+  max-width: 50%;
+  height: auto;
+  position: relative;
+  z-index: 0; /* explicitly lower than overlay */
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* SVG overlay must be absolutely positioned and above image elements */
+.canvas-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2147483647; /* ensure always on top */
+  pointer-events: none; /* allow stage div to receive pointer events for drawing */
+}
+
+/* Annotations themselves should receive pointer events */
+.canvas-overlay .annotation {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.canvas-overlay .annotation rect {
+  fill: none;
+  stroke: #fb923c; /* orange/red */
+  stroke-width: 4;
+  stroke-dasharray: 16 12;
+}
+
+.canvas-overlay .annotation.draft rect {
+  stroke: rgba(251, 146, 60, 0.7);
+  stroke-dasharray: 8 8;
+  opacity: 0.95;
+}
+
+.canvas-overlay .annotation-label rect {
+  fill: rgba(251, 146, 60, 0.92);
+}
+.canvas-overlay .annotation-label text {
+  fill: #0b1120;
+  font-family: "Inter", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}

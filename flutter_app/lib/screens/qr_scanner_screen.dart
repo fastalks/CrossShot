@@ -54,7 +54,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         final info = deviceProvider.deviceInfo;
         // do not send identifierForVendor (UUID) as part of deviceInfo displayed on desktop
         final sentInfo = Map<String, dynamic>.from(info);
-        if (sentInfo.containsKey('identifierForVendor')) sentInfo.remove('identifierForVendor');
 
         String deviceId = 'ios-${DateTime.now().millisecondsSinceEpoch}';
         if (info['identifierForVendor'] != null) deviceId = info['identifierForVendor'];

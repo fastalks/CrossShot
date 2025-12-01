@@ -47,7 +47,6 @@ class _HomeScreenState extends State<HomeScreen> {
         final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
         try {
           final sentInfo = Map<String, dynamic>.from(deviceProvider.deviceInfo);
-          if (sentInfo.containsKey('identifierForVendor')) sentInfo.remove('identifierForVendor');
           _screenshotService.startMonitoring(
               host: first['host']!,
               port: int.parse(first['port']!),
@@ -166,7 +165,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       try {
                         final sentInfo = Map<String, dynamic>.from(deviceProvider.deviceInfo);
-                        if (sentInfo.containsKey('identifierForVendor')) sentInfo.remove('identifierForVendor');
                         await _screenshotService.startMonitoring(
                           host: server['host']!,
                           port: int.parse(server['port']!),
