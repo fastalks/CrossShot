@@ -19,13 +19,13 @@
 
 ## Project overview
 
-CrossShot targets mobile UI automation scenarios: an Android foreground service listens for system screenshots, the Flutter app discovers a desktop Electron application via mDNS, uploads original images, and the desktop performs pixel-level diffing, annotations, and batch management to help QA teams quickly detect UI regressions.
+CrossShot targets mobile UI automation scenarios: an Android foreground service listens for system screenshots. The mobile app pairs with the desktop Electron application by scanning a pairing QR (or by manual server address entry); after pairing the mobile uploads original images and the desktop performs pixel-level diffing, annotations, and batch management to help QA teams quickly detect UI regressions.
 
 ## Key features
 
 - Mobile (Flutter)
   - Android foreground service listens to MediaStore screenshots and provides a floating button for manual capture
-  - QR pairing: the mobile app scans the QR displayed by the desktop. The app first verifies reachability and token via `GET /health`, then calls `POST /api/announce` to complete pairing and start heartbeats (`/api/heartbeat`). On iOS, nsd/mDNS discovery is not used by default.
+  - QR pairing: the mobile app scans the QR displayed by the desktop. The app first verifies reachability and token via `GET /health`, then calls `POST /api/announce` to complete pairing and start heartbeats (`/api/heartbeat`). On iOS, automatic LAN discovery is disabled by default in favor of QR pairing.
   - Robust re-encoding & retry logic to ensure screenshots are fully written before upload
   - Uploads performed with Dio and automatic handling of permissions and network conditions
 
@@ -37,7 +37,7 @@ CrossShot targets mobile UI automation scenarios: an Android foreground service 
   - Batch select, delete, and timeline views
 
  - Communication / Pairing
-  - Pairing: QR scan — the mobile app scans a QR displayed by the desktop, verifies it with `GET /health` and completes pairing with `POST /api/announce`. On iOS, mDNS/NSD discovery is not used by default.
+  - Pairing: QR scan — the mobile app scans a QR displayed by the desktop, verifies it with `GET /health` and completes pairing with `POST /api/announce`. On iOS, automatic LAN discovery is disabled by default in favor of QR pairing.
   - HTTP REST endpoints for upload / list / delete
   - Zero-config behavior: devices on same subnet can communicate after pairing
 
@@ -47,13 +47,13 @@ CrossShot targets mobile UI automation scenarios: an Android foreground service 
 CrossShot/
 ├── electron_app/          # Electron + React desktop app
 │   ├── src/
-│   │   ├── index.ts      # Main process: HTTP, mDNS, IPC, file management
+│   │   ├── index.ts      # Main process: HTTP, IPC, file management (includes pairing QR generator)
 │   │   ├── preload.ts    # Renderer bridge
 │   │   └── renderer/     # React UI (screenshot list, diff viewer)
 │   └── package.json
 ├── flutter_app/           # Flutter mobile app
 │   ├── lib/
-│   │   ├── services/     # mDNS, screenshot monitor, upload logic
+│   │   ├── services/     # screenshot monitor, upload logic (includes QR pairing/ discovery)
 │   │   ├── screens/      # Connection, devices, upload UI
 │   │   └── widgets/
 │   ├── android/          # Foreground service + overlay (Kotlin)
@@ -77,7 +77,7 @@ CrossShot/
 # Desktop
 cd electron_app
 npm install
-npm run dev           # starts Electron + Express + mDNS
+npm run dev           # starts Electron + Express (desktop shows pairing QR in pairing view)
 
 # Mobile
 cd ../flutter_app
@@ -89,8 +89,8 @@ flutter run           # Android real device required for system screenshots
 
 ## Run flow
 
-1. Start the desktop app: the main process launches an HTTP server, registers mDNS, and listens for IPC.
-2. Start the mobile app: it uses nsd to discover `CrossShot Desktop` and shows available services.
+1. Start the desktop app: the main process launches an HTTP server and listens for IPC; the pairing view displays a QR for mobile pairing.
+2. Start the mobile app: the mobile app can scan the desktop pairing QR or accept a manual server address/port to connect to the desktop service.
 3. Grant permissions and enable monitoring: Android requests screenshot/storage/overlay/foreground-service permissions and then listens for MediaStore changes or floating-button triggers.
 4. Upload: when a new screenshot is detected it is re-encoded as PNG to ensure integrity and uploaded via `POST /api/upload`.
 5. Display & diff: the Electron app stores the screenshot under `userData/screenshots`, the renderer fetches metadata via IPC, and pixelmatch is used to generate diffs and statistics.
@@ -98,16 +98,16 @@ flutter run           # Android real device required for system screenshots
 ## Architecture
 
 ```
-┌─────────────┐ mDNS  ┌─────────────┐
+┌─────────────┐ QR  ┌─────────────┐
 │ Flutter App │◄──────►│ Electron   │
 │ Foreground  │ HTTP   │ + Express  │
 │ Service     │───────►│ + React    │
 └─────────────┘        └─────────────┘
-        ▲                     ▼
+  ▲                     ▼
  MediaStore listener      IPC streaming & pixel diffing
 ```
 
-- Mobile stack: Flutter · Dio · nsd · permission_handler · Kotlin foreground service + ContentObserver
+- Mobile stack: Flutter · Dio · permission_handler · Kotlin foreground service + ContentObserver (includes QR pairing handling)
 - Desktop stack: Electron Forge · React 18 · TypeScript · Express · Multer · Pixelmatch · pngjs
 - Data flow: PNG/Base64 → HTTP upload → local file → IPC → React Data URL
 

@@ -21,13 +21,13 @@ English version: [README_EN.md](README_EN.md)
 
 ## 项目概览
 
-CrossShot 面向移动端 UI 自动化测试场景：Android 前台服务实时监听系统截图事件，通过 mDNS 自动发现桌面端 Electron 应用，上传原始图片并在桌面侧完成像素级 diff、标注和批量管理，帮助测试团队快速判断 UI 回归风险。
+CrossShot 面向移动端 UI 自动化测试场景：Android 前台服务实时监听系统截图事件。移动端通过扫描桌面端展示的配对二维码（QR）或手动输入桌面地址/端口完成配对，上传原始图片并在桌面侧完成像素级 diff、标注和批量管理，帮助测试团队快速判断 UI 回归风险。
 
 ## 核心能力
 
 - **移动端 (Flutter)**
   - Android 前台服务监听 MediaStore 截图 & 浮窗按钮手动触发
-  - 二维码（QR）配对：移动端扫描桌面端展示的 QR，先通过 `GET /health` 验证可达性及 token，然后调用 `POST /api/announce` 完成配对并开始心跳（`/api/heartbeat`）。iOS 端默认不再依赖 mDNS/NSD 进行主动发现。
+  - 二维码（QR）配对：移动端扫描桌面端展示的 QR，先通过 `GET /health` 验证可达性及 token，然后调用 `POST /api/announce` 完成配对并开始心跳（`/api/heartbeat`）。iOS 端默认不再使用自动局域网发现机制，改用二维码配对。
   - 多重重试+PNG 重新编码，确保系统截图写入完成后再上传
   - Dio 上传 + 权限、网络状态自动处理
 
@@ -39,7 +39,7 @@ CrossShot 面向移动端 UI 自动化测试场景：Android 前台服务实时�
   - 批量选择、删除、时间轴视图
 
 - **通信链路（配对说明）**
-- 配对方式：二维码（QR）配对。移动端扫描桌面端展示的 QR，先通过 `GET /health` 验证可达性与 token，成功后调用 `POST /api/announce` 完成配对并开始心跳（`/api/heartbeat`）。iOS 默认不使用 mDNS/NSD 进行主动发现。
+- 配对方式：二维码（QR）配对。移动端扫描桌面端展示的 QR，先通过 `GET /health` 验证可达性与 token，成功后调用 `POST /api/announce` 完成配对并开始心跳（`/api/heartbeat`）。iOS 默认不使用自动局域网发现机制，改用二维码配对。
   - HTTP REST 上传/列表/删除接口
   - 跨平台零配置：同网段即可互通
 
@@ -49,13 +49,13 @@ CrossShot 面向移动端 UI 自动化测试场景：Android 前台服务实时�
 CrossShot/
 ├── electron_app/          # Electron + React 桌面端
 │   ├── src/
-│   │   ├── index.ts      # 主进程：HTTP、mDNS、IPC、文件管理
+│   │   ├── index.ts      # 主进程：HTTP、IPC、文件管理（含配对二维码生成）
 │   │   ├── preload.ts    # Renderer Bridge
 │   │   └── renderer/     # React UI (截图列表、对比面板)
 │   └── package.json
 ├── flutter_app/           # Flutter 移动端
 │   ├── lib/
-│   │   ├── services/     # mDNS、截图监控、上传逻辑
+│   │   ├── services/     # 截图监控、上传逻辑（含二维码配对/发现逻辑）
 │   │   ├── screens/      # 连接、设备、上传 UI
 │   │   └── widgets/
 │   ├── android/          # 前台服务 + 浮窗（Kotlin）
@@ -79,7 +79,7 @@ CrossShot/
 # 桌面端
 cd electron_app
 npm install
-npm run dev           # 启动 Electron + Express + mDNS
+npm run dev           # 启动 Electron + Express（桌面端在配对界面展示 QR）
 
 # 移动端
 cd ../flutter_app
@@ -91,8 +91,8 @@ flutter run           # Android 需真机以获取系统截图
 
 ## 运行流程
 
-1. **启动桌面端**：Electron 主进程会自动启动 HTTP 服务器、注册 mDNS、监听 IPC。
-2. **启动移动端**：Flutter APP 通过 nsd 发现 `CrossShot Desktop`，展示可连接服务。
+1. **启动桌面端**：Electron 主进程会自动启动 HTTP 服务器并监听 IPC；在配对界面会展示配对二维码供移动端扫描。
+2. **启动移动端**：移动端可通过扫描桌面端展示的配对二维码或手动输入服务器地址与端口来发现并连接桌面服务。
 3. **授权 & 监听**：Android 端申请截图/存储/悬浮窗/前台服务权限，后台监听 MediaStore 截图或浮窗按钮触发。
 4. **上传**：检测到新截图 → PNG 重新编码 (确保完整) → 通过 `POST /api/upload` 上传。
 5. **展示 & 对比**：Electron 将新截图写入 `userData/screenshots`，React 渲染列表、选择任意两张触发 pixelmatch 对比并展示差异图、差异比统计。
@@ -100,16 +100,16 @@ flutter run           # Android 需真机以获取系统截图
 ## 技术架构
 
 ```
-┌─────────────┐ mDNS  ┌─────────────┐
+┌─────────────┐ QR  ┌─────────────┐
 │ Flutter App │◄──────►│ Electron   │
 │ Foreground  │ HTTP   │ + Express  │
 │ Service     │───────►│ + React    │
 └─────────────┘        └─────────────┘
-        ▲                     ▼
+  ▲                     ▼
  MediaStore 监听        IPC 流式读取、像素对比
 ```
 
-- **移动端栈**：Flutter · Dio · nsd · permission_handler · Kotlin 前台服务 + ContentObserver。
+- **移动端栈**：Flutter · Dio · permission_handler · Kotlin 前台服务 + ContentObserver（含配对二维码处理）。
 - **桌面端栈**：Electron Forge · React 18 · TypeScript · Express · Multer · Pixelmatch · pngjs。
 - **数据流**：PNG/Base64 → HTTP 上传 → 本地文件 → IPC → React Data URL。
 
