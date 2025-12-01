@@ -1,6 +1,6 @@
 {
-  "name": "electron_app",
-  "productName": "electron_app",
+  "name": "CrossShot",
+  "productName": "CrossShot",
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": ".webpack/main",
