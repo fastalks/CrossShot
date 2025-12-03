@@ -34,5 +34,6 @@ jobs:
         with:
           tag: ${{ github.ref_name }}
           artifacts: flutter-apk
-          skipIfReleaseExists: true
+          skipIfReleaseExists: false
+          replacesArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}
