@@ -25,22 +25,28 @@ jobs:
           cd electron_app
           npm run dist
 
-      - name: Package dist into zip
+      - name: Package make output into zip
         run: |
           set -e
           cd electron_app
           version=$(node -p "require('./package.json').version")
           version=${version// /_}
           zipname="crossshot_linux_${version}.zip"
-          # create zip in workspace root
-          (cd dist && zip -r "../${zipname}" .) || true
+          # electron-forge outputs under out/make; create a single zip from that
+          if [ -d out/make ]; then
+            (cd out/make && zip -r "../../${zipname}" .) || true
+          else
+            echo "Warning: out/make not found - listing electron_app contents"
+            ls -al
+            exit 1
+          fi
           ls -al "../${zipname}"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-dist
-          path: electron_app/crossshot_linux_*.zip
+          path: crossshot_linux_*.zip
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
@@ -67,18 +73,21 @@ jobs:
           cd electron_app
           npm run dist
 
-      - name: Package dist into zip (Windows)
+      - name: Package make output into zip (Windows)
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $pkg = Get-Content electron_app\package.json | ConvertFrom-Json
           $version = $pkg.version -replace ' ','_'
           $zip = "crossshot_windows_$version.zip"
-          if (Test-Path "electron_app\dist") {
-            Compress-Archive -Path electron_app\dist\* -DestinationPath $zip -Force
+          if (Test-Path "electron_app\out\make") {
+            Push-Location electron_app\out\make
+            $files = Get-ChildItem -Recurse -File
+            Compress-Archive -Path $files.FullName -DestinationPath "..\..\$zip" -Force
+            Pop-Location
             Write-Output "Created $zip"
           } else {
-            Write-Error "dist folder not found"
+            Write-Error "out\\make folder not found"
             exit 1
           }
 
@@ -86,7 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: electron-dist
-          path: electron_app/crossshot_windows_*.zip
+          path: crossshot_windows_*.zip
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
@@ -114,21 +123,27 @@ jobs:
           cd electron_app
           npm run dist
 
-      - name: Package dist into zip
+      - name: Package make output into zip
         run: |
           set -e
           cd electron_app
           version=$(node -p "require('./package.json').version")
           version=${version// /_}
           zipname="crossshot_macos_${version}.zip"
-          (cd dist && zip -r "../${zipname}" .) || true
+          if [ -d out/make ]; then
+            (cd out/make && zip -r "../../${zipname}" .) || true
+          else
+            echo "Warning: out/make not found - listing electron_app contents"
+            ls -al
+            exit 1
+          fi
           ls -al "../${zipname}"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-dist
-          path: electron_app/crossshot_macos_*.zip
+          path: crossshot_macos_*.zip
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
