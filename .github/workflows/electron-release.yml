@@ -47,8 +47,7 @@ jobs:
         with:
           tag: ${{ github.ref_name }}
           artifacts: electron-dist
-          skipIfReleaseExists: false
-          replacesArtifacts: true
+          skipIfReleaseExists: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
@@ -94,8 +93,7 @@ jobs:
         with:
           tag: ${{ github.ref_name }}
           artifacts: electron-dist
-          skipIfReleaseExists: false
-          replacesArtifacts: true
+          skipIfReleaseExists: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos:
@@ -137,6 +135,5 @@ jobs:
         with:
           tag: ${{ github.ref_name }}
           artifacts: electron-dist
-          skipIfReleaseExists: false
-          replacesArtifacts: true
+          skipIfReleaseExists: true
           token: ${{ secrets.GITHUB_TOKEN }}
