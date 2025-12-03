@@ -189,93 +189,77 @@ EOF
     echo "Not macOS — skipping iOS build"
   fi
 
-  # Electron build for current host
-  if [ -d "$ROOT_DIR/electron_app" ] && command -v npm >/dev/null 2>&1; then
-    echo "Building Electron for host platform..."
-    # Try clean install first; if lockfile out-of-sync, fallback to npm install
-    (cd "$ROOT_DIR/electron_app" && npm ci) || (echo "npm ci failed, running npm install" && cd "$ROOT_DIR/electron_app" && npm install)
-    if (cd "$ROOT_DIR/electron_app" && npm run dist); then
-      echo "Collecting electron installers from electron_app/out/make"
-      if [ -d "$ROOT_DIR/electron_app/out/make" ]; then
-        echo "Processing electron installers in $ROOT_DIR/electron_app/out/make"
-        # iterate over files under out/make and copy each with standardized name
-        while IFS= read -r -d '' file; do
-          # skip directories
-          [ -f "$file" ] || continue
-          filename=$(basename -- "$file")
-          ext="${filename##*.}"
-          parent=$(basename "$(dirname "$file")")
-          grandparent=$(basename "$(dirname "$(dirname "$file")")")
+  # Electron: do not attempt to build here. If installers already exist in out/make, collect them and create DMG on macOS.
+  if [ -d "$ROOT_DIR/electron_app" ]; then
+    if [ -d "$ROOT_DIR/electron_app/out/make" ]; then
+      echo "Collecting existing electron installers from electron_app/out/make"
+      echo "Processing electron installers in $ROOT_DIR/electron_app/out/make"
+      while IFS= read -r -d '' file; do
+        [ -f "$file" ] || continue
+        filename=$(basename -- "$file")
+        ext="${filename##*.}"
+        ext_lc=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+        parent=$(basename "$(dirname "$file")")
 
-          # determine platform by extension or parent folder hints
-          case "${ext,,}" in
-            dmg|pkg)
-              platform="macos";;
-            exe|msi)
-              platform="windows";;
-            deb|AppImage|rpm|snap|tar|gz)
-              platform="linux";;
-            zip)
-              # try to use parent/grandparent to indicate platform
-              if echo "$parent" | grep -qi "darwin\|mac"; then platform="macos"; elif echo "$parent" | grep -qi "win\|windows"; then platform="windows"; else platform="archive"; fi
-              ;;
-            appimage)
-              platform="linux";;
-            *)
-              # fallback: use parent folder name
-              platform="$parent";;
-          esac
+        case "$ext_lc" in
+          dmg|pkg)
+            platform="macos";;
+          exe|msi)
+            platform="windows";;
+          deb|appimage|rpm|snap|tar|gz)
+            platform="linux";;
+          zip)
+            if echo "$parent" | grep -qi "darwin\|mac"; then platform="macos"; elif echo "$parent" | grep -qi "win\|windows"; then platform="windows"; else platform="archive"; fi
+            ;;
+          *)
+            platform="$parent";;
+        esac
 
-          # sanitize platform name (remove spaces)
-          platform=$(echo "$platform" | tr ' ' '_' )
+        platform=$(echo "$platform" | tr ' ' '_' )
+        target="$RELEASE_DIR/crossshot_${platform}_${build_name}_${build_num}.${ext}"
+        cp "$file" "$target" && echo "Copied $file -> $target"
+      done < <(find "$ROOT_DIR/electron_app/out/make" -type f -print0)
 
-          target="$RELEASE_DIR/crossshot_${platform}_${build_name}_${build_num}.${ext}"
-          cp "$file" "$target" && echo "Copied $file -> $target"
-        done < <(find "$ROOT_DIR/electron_app/out/make" -type f -print0)
-        # On macOS, if electron-forge produced a darwin zip but no dmg, try to create a dmg from the .app inside the zip
-        if [ "$(uname)" = "Darwin" ]; then
-          if command -v hdiutil >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1; then
-            echo "Attempting to create DMG(s) from darwin zip(s) if present..."
-            shopt -s nullglob
-            for z in "$ROOT_DIR/electron_app/out/make"/*darwin*.zip; do
-              [ -f "$z" ] || continue
-              dmg_target="$RELEASE_DIR/crossshot_macos_${build_name}_${build_num}.dmg"
-              if [ -f "$dmg_target" ]; then
-                echo "DMG already exists: $dmg_target"
-                continue
-              fi
-              tmpdir=$(mktemp -d)
-              echo "Unzipping $z to $tmpdir"
-              unzip -q "$z" -d "$tmpdir" || { echo "unzip failed for $z"; rm -rf "$tmpdir"; continue; }
-              app=$(find "$tmpdir" -maxdepth 4 -type d -name "*.app" | head -n 1 || true)
-              if [ -n "$app" ]; then
-                echo "Found app: $app — creating DMG..."
-                tmpdmg="$tmpdir/out.dmg"
-                hdiutil create -volname "CrossShot" -srcfolder "$app" -ov -format UDZO "$tmpdmg" >/dev/null 2>&1 || true
-                if [ -f "$tmpdmg" ]; then
-                  mv "$tmpdmg" "$dmg_target"
-                  echo "DMG created -> $dmg_target"
-                else
-                  echo "Failed to create dmg from $app"
-                fi
+      # On macOS, try to create DMG from darwin zips if present
+      if [ "$(uname)" = "Darwin" ]; then
+        if command -v hdiutil >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1; then
+          echo "Attempting to create DMG(s) from darwin zip(s) if present..."
+          # Find darwin zip files anywhere under out/make (including nested dirs)
+          while IFS= read -r -d '' z; do
+            [ -f "$z" ] || continue
+            dmg_target="$RELEASE_DIR/crossshot_macos_${build_name}_${build_num}.dmg"
+            if [ -f "$dmg_target" ]; then
+              echo "DMG already exists: $dmg_target"
+              continue
+            fi
+            tmpdir=$(mktemp -d)
+            echo "Unzipping $z to $tmpdir"
+            unzip -q "$z" -d "$tmpdir" || { echo "unzip failed for $z"; rm -rf "$tmpdir"; continue; }
+            app=$(find "$tmpdir" -maxdepth 4 -type d -name "*.app" | head -n 1 || true)
+            if [ -n "$app" ]; then
+              echo "Found app: $app — creating DMG..."
+              tmpdmg="$tmpdir/out.dmg"
+              hdiutil create -volname "crossshot" -srcfolder "$app" -ov -format UDZO "$tmpdmg" >/dev/null 2>&1 || true
+              if [ -f "$tmpdmg" ]; then
+                mv "$tmpdmg" "$dmg_target"
+                echo "DMG created -> $dmg_target"
               else
-                echo "No .app found inside $z; skipping dmg creation"
+                echo "Failed to create dmg from $app"
               fi
-              rm -rf "$tmpdir"
-            done
-            shopt -u nullglob
-          else
-            echo "hdiutil or unzip not available — cannot create dmg automatically"
-          fi
+            else
+              echo "No .app found inside $z; skipping dmg creation"
+            fi
+            rm -rf "$tmpdir"
+          done < <(find "$ROOT_DIR/electron_app/out/make" -type f -iname "*darwin*.zip" -print0)
+        else
+          echo "hdiutil or unzip not available — cannot create dmg automatically"
         fi
-      else
-        echo "electron out/make not found — check electron-forge output"
       fi
     else
-      echo "Electron build failed"
+      echo "No electron installers found in out/make — skipping Electron collection"
     fi
   else
-    echo "npm or electron_app not found — skipping Electron build"
+    echo "electron_app directory not found — skipping Electron collection"
   fi
 
   echo "Artifacts collected in $RELEASE_DIR"
