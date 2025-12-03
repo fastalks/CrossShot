@@ -131,17 +131,49 @@ do_builds() {
   if [ "$(uname)" = "Darwin" ]; then
     echo "Detected macOS — building iOS IPA (requires signing & Xcode config)..."
     if command -v flutter >/dev/null 2>&1; then
-      if (cd "$FS_APP" && flutter build ipa --export-options-plist=ios/ExportOptions.plist --build-name="$build_name" --build-number="$build_num"); then
-        # IPA location
+      # Determine export options plist
+      EXPORT_PLIST="$FS_APP/ios/ExportOptions.plist"
+      TEMP_EXPORT_PLIST=""
+      BUILD_IPA_CMD=""
+
+      if [ -f "$EXPORT_PLIST" ]; then
+        BUILD_IPA_CMD=(flutter build ipa --export-options-plist=ios/ExportOptions.plist --build-name="$build_name" --build-number="$build_num")
+      else
+        if [ "${NO_CODESIGN:-0}" = "1" ]; then
+          echo "ExportOptions.plist not found — building ipa with --no-codesign as NO_CODESIGN=1"
+          BUILD_IPA_CMD=(flutter build ipa --no-codesign --build-name="$build_name" --build-number="$build_num")
+        else
+          echo "Warning: ios/ExportOptions.plist not found. Creating a temporary development ExportOptions.plist to attempt export."
+          TEMP_EXPORT_PLIST=$(mktemp /tmp/ExportOptions.XXXX.plist)
+          cat > "$TEMP_EXPORT_PLIST" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>development</string>
+</dict>
+</plist>
+EOF
+          BUILD_IPA_CMD=(flutter build ipa --export-options-plist="$TEMP_EXPORT_PLIST" --build-name="$build_name" --build-number="$build_num")
+        fi
+      fi
+
+      if (cd "$FS_APP" && "${BUILD_IPA_CMD[@]}"); then
         ipa="$FS_APP/build/ios/ipa/Runner.ipa"
         if [ -f "$ipa" ]; then
           cp "$ipa" "$RELEASE_DIR/app-ios-${build_name}_${build_num}.ipa"
           echo "iOS IPA -> $RELEASE_DIR/app-ios-${build_name}_${build_num}.ipa"
         else
-          echo "IPA not found; iOS build may require codesign config"
+          echo "IPA not found; iOS build may require codesign config or ExportOptions mismatch"
         fi
       else
         echo "iOS build failed or requires manual signing configuration"
+      fi
+
+      # cleanup temp plist if created
+      if [ -n "$TEMP_EXPORT_PLIST" ] && [ -f "$TEMP_EXPORT_PLIST" ]; then
+        rm -f "$TEMP_EXPORT_PLIST"
       fi
     else
       echo "flutter not found, skipping iOS build"
