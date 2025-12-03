@@ -1,4 +1,4 @@
-package com.example.flutter_app
+package com.crossshot.flutter_app
 
 import android.content.Context
 import android.os.Build

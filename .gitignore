@@ -66,3 +66,5 @@ coverage/
 
 # Misc
 .env
+
+release_artifacts/
