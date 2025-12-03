@@ -8,13 +8,14 @@
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
+    "dist": "electron-forge make",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx ."
   },
   "keywords": [],
   "author": {
-    "name": "wangfaguo",
-    "email": "faguo.wang@reacheng.com"
+    "name": "fastalks",
+    "email": "fastalks@reacheng.com"
   },
   "license": "MIT",
   "devDependencies": {
