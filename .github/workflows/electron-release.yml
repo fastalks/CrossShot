@@ -21,13 +21,26 @@ jobs:
           npm ci
       - name: Build Electron (Linux)
         run: |
+          set -e
           cd electron_app
           npm run dist
+
+      - name: Package dist into zip
+        run: |
+          set -e
+          cd electron_app
+          version=$(node -p "require('./package.json').version")
+          version=${version// /_}
+          zipname="crossshot_linux_${version}.zip"
+          # create zip in workspace root
+          (cd dist && zip -r "../${zipname}" .) || true
+          ls -al "../${zipname}"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-dist
-          path: electron_app/dist/**/
+          path: electron_app/crossshot_linux_*.zip
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
@@ -54,11 +67,27 @@ jobs:
         run: |
           cd electron_app
           npm run dist
+
+      - name: Package dist into zip (Windows)
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $pkg = Get-Content electron_app\package.json | ConvertFrom-Json
+          $version = $pkg.version -replace ' ','_'
+          $zip = "crossshot_windows_$version.zip"
+          if (Test-Path "electron_app\dist") {
+            Compress-Archive -Path electron_app\dist\* -DestinationPath $zip -Force
+            Write-Output "Created $zip"
+          } else {
+            Write-Error "dist folder not found"
+            exit 1
+          }
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-dist
-          path: electron_app/dist/**/
+          path: electron_app/crossshot_windows_*.zip
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
@@ -83,13 +112,25 @@ jobs:
           npm ci
       - name: Build Electron (macOS)
         run: |
+          set -e
           cd electron_app
           npm run dist
+
+      - name: Package dist into zip
+        run: |
+          set -e
+          cd electron_app
+          version=$(node -p "require('./package.json').version")
+          version=${version// /_}
+          zipname="crossshot_macos_${version}.zip"
+          (cd dist && zip -r "../${zipname}" .) || true
+          ls -al "../${zipname}"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-dist
-          path: electron_app/dist/**/
+          path: electron_app/crossshot_macos_*.zip
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1

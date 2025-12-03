@@ -23,11 +23,31 @@ jobs:
         run: |
           cd flutter_app
           flutter build apk --release
+      - name: Rename APK to include pubspec version
+        run: |
+          set -e
+          cd flutter_app
+          if [ ! -f pubspec.yaml ]; then
+            echo "pubspec.yaml not found" >&2
+            exit 1
+          fi
+          version=$(grep '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//; s/+.*//')
+          version=${version// /_}
+          src="build/app/outputs/flutter-apk/app-release.apk"
+          dst="build/app/outputs/flutter-apk/crossshot_android_${version}.apk"
+          if [ -f "$src" ]; then
+            mv "$src" "$dst"
+            echo "Renamed APK -> $dst"
+          else
+            echo "APK not found at $src" >&2
+            exit 1
+          fi
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: flutter-apk
-          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          path: flutter_app/build/app/outputs/flutter-apk/crossshot_android_*.apk
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
