@@ -25,28 +25,17 @@ jobs:
           cd electron_app
           npm run dist
 
-      - name: Package make output into zip
+      - name: List make output
         run: |
           set -e
-          cd electron_app
-          version=$(node -p "require('./package.json').version")
-          version=${version// /_}
-          zipname="crossshot_linux_${version}.zip"
-          # electron-forge outputs under out/make; create a single zip from that
-          if [ -d out/make ]; then
-            (cd out/make && zip -r "../../${zipname}" .) || true
-          else
-            echo "Warning: out/make not found - listing electron_app contents"
-            ls -al
-            exit 1
-          fi
-          ls -al "../${zipname}"
+          echo "Listing electron_app/out/make"
+          ls -al electron_app/out/make || true
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-dist
-          path: crossshot_linux_*.zip
+          path: electron_app/out/make/**
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
@@ -73,29 +62,17 @@ jobs:
           cd electron_app
           npm run dist
 
-      - name: Package make output into zip (Windows)
+      - name: List make output (Windows)
         shell: pwsh
         run: |
-          Set-StrictMode -Version Latest
-          $pkg = Get-Content electron_app\package.json | ConvertFrom-Json
-          $version = $pkg.version -replace ' ','_'
-          $zip = "crossshot_windows_$version.zip"
-          if (Test-Path "electron_app\out\make") {
-            Push-Location electron_app\out\make
-            $files = Get-ChildItem -Recurse -File
-            Compress-Archive -Path $files.FullName -DestinationPath "..\..\$zip" -Force
-            Pop-Location
-            Write-Output "Created $zip"
-          } else {
-            Write-Error "out\\make folder not found"
-            exit 1
-          }
+          Write-Output "Listing electron_app\out\make"
+          if (Test-Path "electron_app\out\make") { Get-ChildItem electron_app\out\make -Recurse } else { Write-Output "no out\\make" }
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-dist
-          path: crossshot_windows_*.zip
+          path: electron_app/out/make/**
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
@@ -123,27 +100,17 @@ jobs:
           cd electron_app
           npm run dist
 
-      - name: Package make output into zip
+      - name: List make output (macOS)
         run: |
           set -e
-          cd electron_app
-          version=$(node -p "require('./package.json').version")
-          version=${version// /_}
-          zipname="crossshot_macos_${version}.zip"
-          if [ -d out/make ]; then
-            (cd out/make && zip -r "../../${zipname}" .) || true
-          else
-            echo "Warning: out/make not found - listing electron_app contents"
-            ls -al
-            exit 1
-          fi
-          ls -al "../${zipname}"
+          echo "Listing electron_app/out/make"
+          ls -al electron_app/out/make || true
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-dist
-          path: crossshot_macos_*.zip
+          path: electron_app/out/make/**
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
