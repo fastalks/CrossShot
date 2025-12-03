@@ -7,13 +7,7 @@ import StitchStudio, { type StitchStudioHandle } from './components/StitchStudio
 import FloatingDeviceIcon from './components/FloatingDeviceIcon';
 type DevicePlatform = 'android' | 'ios';
 
-const parseDeviceInfo = (raw: string): { name: string; platform: DevicePlatform } => {
-  if (!raw) {
-    return { name: '未知设备', platform: 'android' };
-  }
-  const trimmed = raw.trim();
-  let platformHint = trimmed.toLowerCase();
-  let label = trimmed;
+const parseDeviceInfo = (raw: any): { name: string; platform: DevicePlatform } => {
   const resolveLabelFromRecord = (record: Record<string, unknown>): string => {
     const candidates = ['name', 'model', 'device', 'brand', 'manufacturer', 'osVersion']
       .map((key) => record[key])
@@ -22,45 +16,37 @@ const parseDeviceInfo = (raw: string): { name: string; platform: DevicePlatform 
     return candidates[0] ?? '未知设备';
   };
 
-  if (trimmed.startsWith('{')) {
-    let parsed: unknown = null;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch (error) {
-      // Handle mDNS payloads that look like JS objects but are not valid JSON.
-      const normalized = trimmed
-        .replace(/([,{]\s*)([A-Za-z0-9_]+)(\s*:)/g, '$1"$2"$3')
-        .replace(/'([^']*)'/g, '"$1"');
-      try {
-        parsed = JSON.parse(normalized);
-      } catch (secondary) {
-        console.debug('Failed to normalize device info:', secondary);
-      }
-    }
+  if (!raw) return { name: '未知设备', platform: 'android' };
 
-    if (typeof parsed === 'string') {
-      label = parsed;
-      platformHint = label.toLowerCase();
-    } else if (typeof parsed === 'object' && parsed !== null) {
-      label = resolveLabelFromRecord(parsed as Record<string, unknown>);
-      platformHint = JSON.stringify(parsed).toLowerCase();
-    } else if (parsed === null) {
-      const pseudoPayload = trimmed
-        .slice(1, -1)
-        .split(',')
-        .map((segment) => segment.split(':').map((part) => part.trim()));
-      const lookup: Record<string, string> = {};
-      pseudoPayload.forEach(([key, value]) => {
-        if (key && value) {
-          lookup[key.toLowerCase()] = value.replace(/^"|"$/g, '');
-        }
-      });
-      label = resolveLabelFromRecord(lookup);
-      platformHint = trimmed.toLowerCase();
+  // If object, prefer explicit fields
+  if (typeof raw === 'object') {
+    const obj = raw as Record<string, any>;
+    const name = resolveLabelFromRecord(obj);
+    const plat = (obj.platform || obj.os || '').toString().toLowerCase();
+    const platform: DevicePlatform = plat.includes('ios') || plat.includes('iphone') || plat.includes('ipad') || plat.includes('apple') ? 'ios' : 'android';
+    return { name: name || '未知设备', platform };
+  }
+
+  const trimmed = String(raw).trim();
+  if (!trimmed) return { name: '未知设备', platform: 'android' };
+
+  // try parse JSON string
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'object' && parsed !== null) {
+        const name = resolveLabelFromRecord(parsed as Record<string, unknown>);
+        const plat = JSON.stringify(parsed).toLowerCase();
+        const platform: DevicePlatform = plat.includes('ios') || plat.includes('iphone') || plat.includes('ipad') || plat.includes('apple') ? 'ios' : 'android';
+        return { name: name || '未知设备', platform };
+      }
+    } catch (_) {
+      // fallthrough
     }
   }
-  const platform: DevicePlatform = platformHint.includes('ios') || platformHint.includes('iphone') || platformHint.includes('ipad') || platformHint.includes('apple') ? 'ios' : 'android';
-  return { name: label || '未知设备', platform };
+
+  const platform: DevicePlatform = trimmed.toLowerCase().includes('ios') || trimmed.toLowerCase().includes('iphone') || trimmed.toLowerCase().includes('ipad') || trimmed.toLowerCase().includes('apple') ? 'ios' : 'android';
+  return { name: trimmed || '未知设备', platform };
 };
 
 const toTimestamp = (value: string): number => {

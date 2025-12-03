@@ -2,7 +2,6 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import MDNSService from './main/services/mdnsService';
 import os from 'os';
 import { app as electronApp } from 'electron';
 import HTTPServer from './main/services/httpServer';
@@ -18,7 +17,6 @@ if (require('electron-squirrel-startup')) {
 
 const SERVER_PORT = 8080;
 let mainWindow: BrowserWindow | null = null;
-let mdnsService: MDNSService | null = null;
 let httpServer: HTTPServer | null = null;
 // map of last heartbeat time keyed by `${platform}:${deviceId}`
 const lastHeartbeat: Map<string, number> = new Map();
@@ -122,9 +120,6 @@ const startServices = (): void => {
     },
   );
 
-  mdnsService = new MDNSService();
-  mdnsService.start(SERVER_PORT);
-
   // start heartbeat cleanup timer: clear sessions if no heartbeat seen within timeout
   const HEARTBEAT_CHECK_INTERVAL_MS = 5000;
   const HEARTBEAT_TIMEOUT_MS = 15000;
@@ -149,8 +144,6 @@ const startServices = (): void => {
 };
 
 const stopServices = (): void => {
-  mdnsService?.stop();
-  mdnsService = null;
 
   httpServer?.stop();
   httpServer = null;

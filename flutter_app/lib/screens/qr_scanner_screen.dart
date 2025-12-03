@@ -25,6 +25,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   Future<void> _handleBarcode(String raw) async {
     if (_processing) return;
     setState(() => _processing = true);
+    var paired = false;
 
     String baseUrl = raw.trim();
     if (!baseUrl.startsWith('http')) {
@@ -76,6 +77,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配对成功，已通知桌面并开始本机监听')));
+              paired = true;
               Navigator.of(context).pop(true);
               return;
           }
@@ -92,7 +94,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法连接到该服务或验证失败')));
     } finally {
-      if (mounted) setState(() => _processing = false);
+      if (mounted && !paired) setState(() => _processing = false);
     }
   }
 

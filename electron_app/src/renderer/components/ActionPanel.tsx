@@ -25,6 +25,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
   platformSummaries,
 }: ActionPanelProps) => {
   const [sessions, setSessions] = useState<any>({ android: null, ios: null });
+  const [lastLabels, setLastLabels] = useState<{ android: string; ios: string }>({ android: '', ios: '' });
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,13 +63,51 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     };
   }, []);
 
+  // Helper utilities for device label resolution
+  const isUuid = (v: any) => typeof v === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v);
+  const getPlatformInfo = (platform: 'android' | 'ios') => {
+    const payload = (sessions as any)[platform];
+    if (payload && typeof payload === 'object') return payload.deviceInfo ?? payload;
+    return null;
+  };
+
+  const buildLabelForPlatform = (platform: 'android' | 'ios') => {
+    const generic = platform === 'android' ? '已连接设备' : '已连接 iOS';
+    let info = getPlatformInfo(platform);
+    if (!info && sessions.deviceInfo && typeof sessions.deviceInfo === 'object') {
+      const globalPlatform = (sessions.deviceInfo.platform ?? '').toString().toLowerCase();
+      if (globalPlatform === platform) info = sessions.deviceInfo;
+    }
+
+    if (info && typeof info === 'object') {
+      if (info.name && !isUuid(info.name)) return info.name;
+      if (platform === 'android' && info.model) return `${info.manufacturer ?? ''} ${info.model ?? ''}`.trim();
+      if (platform === 'ios' && info.model) return info.model;
+    }
+
+    return generic;
+  };
+
+  // Keep last-seen meaningful labels to avoid flicker when transient/invalid payloads arrive
+  useEffect(() => {
+    try {
+      const a = buildLabelForPlatform('android');
+      const i = buildLabelForPlatform('ios');
+      setLastLabels((prev) => ({
+        android: a !== '已连接设备' ? a : prev.android,
+        ios: i !== '已连接 iOS' ? i : prev.ios,
+      }));
+    } catch (_) {}
+  }, [sessions]);
+
   const DeviceConnectionIndicator: React.FC = () => {
     const androidActive = !!sessions.android;
     if (!androidActive) return null;
     const title = 'Android 已连接';
     const color = '#2ecc71';
-    // prefer a human-friendly name if provided in deviceInfo, otherwise show device id
-    const deviceLabel = (sessions.deviceInfo && sessions.deviceInfo.model) ? `${sessions.deviceInfo.manufacturer ?? ''} ${sessions.deviceInfo.model ?? ''}`.trim() : (sessions.android ?? '已连接设备');
+    const candidate = buildLabelForPlatform('android');
+    const deviceLabel = candidate === '已连接设备' ? (lastLabels.android || candidate) : candidate;
+
     return (
       <div title={title} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ width: 10, height: 10, borderRadius: 6, background: color, boxShadow: '0 0 6px rgba(46, 204, 113, 0.6)' }} />
@@ -78,13 +117,14 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
       </div>
     );
   };
+
   const IOSConnectionIndicator: React.FC = () => {
     const iosActive = !!sessions.ios;
     if (!iosActive) return null;
     const title = 'iOS 已连接';
     const color = '#2ecc71';
-    // For iOS, prefer the device 'name' field and do NOT display the UUID (identifierForVendor)
-    const deviceLabel = (sessions.deviceInfo && sessions.deviceInfo.name) ? sessions.deviceInfo.name : (sessions.ios ?? '已连接 iOS');
+    const candidate = buildLabelForPlatform('ios');
+    const deviceLabel = candidate === '已连接 iOS' ? (lastLabels.ios || candidate) : candidate;
     return (
       <div title={title} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ width: 10, height: 10, borderRadius: 6, background: color, boxShadow: '0 0 6px rgba(46, 204, 113, 0.6)' }} />

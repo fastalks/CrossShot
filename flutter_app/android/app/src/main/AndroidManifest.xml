@@ -14,7 +14,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
-        android:label="flutter_app"
+        android:label="CrossShot"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -77,7 +77,7 @@ const ScreenshotCard: React.FC<ScreenshotCardProps> = ({ screenshot, isSelected,
       <div className="screenshot-info">
         <div className="info-row">
           <span className="label">设备</span>
-          <span className="value">{screenshot.deviceInfo}</span>
+          <span className="value">{typeof screenshot.deviceInfo === 'object' ? (screenshot.deviceInfo.name ?? JSON.stringify(screenshot.deviceInfo)) : String(screenshot.deviceInfo)}</span>
         </div>
         <div className="info-row">
           <span className="label">时间</span>

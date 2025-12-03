@@ -276,9 +276,9 @@ const CompareView = forwardRef<CompareViewHandle, CompareViewProps>(
             <p>拖动鼠标绘制高亮框，单击编号可更新说明，右键删除。</p>
           </div>
           <div className="compare-meta">
-            <span>{first.deviceInfo}</span>
+            <span>{typeof first.deviceInfo === 'object' ? (first.deviceInfo.name ?? JSON.stringify(first.deviceInfo)) : String(first.deviceInfo)}</span>
             <span className="separator" />
-            <span>{second.deviceInfo}</span>
+            <span>{typeof second.deviceInfo === 'object' ? (second.deviceInfo.name ?? JSON.stringify(second.deviceInfo)) : String(second.deviceInfo)}</span>
           </div>
         </header>
 

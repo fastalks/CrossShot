@@ -31,6 +31,7 @@ class ScreenshotService extends ChangeNotifier {
   String? get monitorHost => _monitorHost;
   int? get monitorPort => _monitorPort;
   Map<String, dynamic>? get monitorServerInfo => _monitorServerInfo;
+   Map<String, dynamic>? get monitorDeviceInfo => _monitorDeviceInfo;
 
   /// 捕获屏幕截图
   Future<File?> captureScreen() async {
@@ -340,7 +341,7 @@ class ScreenshotService extends ChangeNotifier {
           screenshot.path,
           filename: 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png',
         ),
-        'deviceInfo': deviceInfo.toString(),
+        'deviceInfo': deviceInfo,
         'timestamp': DateTime.now().toIso8601String(),
       });
 

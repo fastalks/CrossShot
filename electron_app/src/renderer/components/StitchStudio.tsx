@@ -45,51 +45,19 @@ const buildFilename = (template: string, count: number): string =>
 
 type ShotPlatform = 'android' | 'ios';
 
-const normalizeDeviceInfo = (raw: string): string => {
-    if (!raw) {
-        return '';
-    }
-    const trimmed = raw.trim();
-    if (!trimmed) {
-        return '';
-    }
-    if (trimmed.startsWith('{')) {
-        try {
-            const parsed = JSON.parse(trimmed);
-            if (typeof parsed === 'string') {
-                return parsed;
-            }
-            if (typeof parsed === 'object' && parsed !== null) {
-                if (typeof parsed.platform === 'string') {
-                    return parsed.platform;
-                }
-                if (typeof parsed.os === 'string') {
-                    return parsed.os;
-                }
-                if (typeof parsed.systemVersion === 'string') {
-                    return parsed.systemVersion;
-                }
-                if (typeof parsed.osVersion === 'string') {
-                    return parsed.osVersion;
-                }
-                const brand = typeof parsed.brand === 'string' ? parsed.brand : '';
-                const model = typeof parsed.model === 'string' ? parsed.model : '';
-                if (brand || model) {
-                    return `${brand} ${model}`.trim();
-                }
-            }
-        } catch (error) {
-            console.debug('Failed to parse deviceInfo:', error);
-        }
-    }
-    return trimmed;
-};
 
 const detectPlatform = (meta: ScreenshotMeta): ShotPlatform => {
-    const infoText = normalizeDeviceInfo(meta.deviceInfo).toLowerCase();
-    if (infoText.includes('ios') || infoText.includes('iphone') || infoText.includes('ipad') || infoText.includes('apple')) {
-        return 'ios';
+    const di = (meta as any).deviceInfo;
+    // Only use explicit platform/os fields — do not guess from name or freeform text
+    if (di && typeof di === 'object') {
+        const pField = di.platform ?? di.os;
+        if (typeof pField === 'string') {
+            const p = pField.toLowerCase();
+            if (p.includes('ios')) return 'ios';
+            if (p.includes('android')) return 'android';
+        }
     }
+    // Default to Android when platform is not explicitly provided
     return 'android';
 };
 

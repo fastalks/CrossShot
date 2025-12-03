@@ -60,6 +60,9 @@ class HTTPServer {
     this.configureRoutes();
   }
 
+  // Previously we normalized deviceInfo by guessing platform from freeform text.
+  // Now we prefer to store the uploaded fields as-is (structured) and avoid guessing or modifying casing.
+
   private configureMiddleware(): void {
     this.expressApp.use(express.json());
     this.expressApp.use(express.urlencoded({ extended: true }));
@@ -76,6 +79,7 @@ class HTTPServer {
   }
 
   private configureRoutes(): void {
+
     this.expressApp.post('/api/upload', this.upload.single('screenshot'), (req: Request, res: Response) => {
       try {
         const { file } = req as Request & { file?: MulterUploadedFile };
@@ -87,14 +91,87 @@ class HTTPServer {
 
         const filePath = file.path ?? path.join(this.storageDir, file.filename);
 
+        // Build deviceInfo object directly from upload fields / payload. Do not perform platform casing normalization.
+        let di: any = {};
+        const rawPayload = req.body && req.body.deviceInfo !== undefined ? req.body.deviceInfo : undefined;
+        if (rawPayload !== undefined && rawPayload !== null) {
+          if (typeof rawPayload === 'object') {
+            di = { ...rawPayload, raw: rawPayload };
+          } else {
+            const s = String(rawPayload).trim();
+            if (s.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(s);
+                if (typeof parsed === 'object' && parsed !== null) di = { ...parsed, raw: parsed };
+                else di.raw = s;
+              } catch (_e) {
+                di.raw = s;
+              }
+            } else {
+              di.raw = s;
+            }
+          }
+        }
+
+        // If the upload form provided explicit device fields, copy them verbatim (no coercion of platform casing)
+        const allowedFields = [
+          'platform',
+          'name',
+          'model',
+          'systemVersion',
+          'identifierForVendor',
+          'manufacturer',
+          'version',
+          'sdkInt',
+          'brand',
+          'device',
+        ];
+        for (const f of allowedFields) {
+          if (req.body && Object.prototype.hasOwnProperty.call(req.body, f) && req.body[f] !== undefined && req.body[f] !== null) {
+            if (f === 'sdkInt') {
+              const n = Number(req.body[f]);
+              if (!Number.isNaN(n)) di[f] = n;
+            } else {
+              di[f] = req.body[f];
+            }
+          }
+        }
+
+        // Guard: if client accidentally submitted a server health payload as deviceInfo (common when proxying),
+        // remove it instead of storing it verbatim. We only strip obvious health responses that include
+        // a CrossShot service marker or health token. Explicit device fields remain preserved.
+        try {
+          const raw = (di && (di.raw ?? undefined)) as any;
+          if (raw) {
+            if (typeof raw === 'object' && raw.service && raw.status) {
+              delete di.raw;
+            } else if (typeof raw === 'string' && raw.includes('service: CrossShot')) {
+              delete di.raw;
+            }
+          }
+        } catch (_) {
+          // silently ignore any inspection errors
+        }
+
         const screenshot: ScreenshotMeta = {
           id: Date.now().toString(),
           filename: file.filename,
           path: filePath,
-          deviceInfo: req.body.deviceInfo ?? 'Unknown Device',
+          deviceInfo: di,
           timestamp: req.body.timestamp ?? new Date().toISOString(),
           size: file.size,
         };
+        // Debug: if deviceInfo is empty, log form fields to help diagnose missing client payloads
+        try {
+          if (!di || (typeof di === 'object' && Object.keys(di).length === 0)) {
+            console.warn('Upload: deviceInfo empty for file', file.filename, 'formKeys=', Object.keys(req.body));
+            // also log common identifying headers
+            console.debug('Upload headers:', {
+              'x-forwarded-for': req.headers['x-forwarded-for'],
+              'user-agent': req.headers['user-agent'],
+            });
+          }
+        } catch (_) {}
 
         this.screenshots.push(screenshot);
         this.saveMetadata();
@@ -264,14 +341,62 @@ class HTTPServer {
 
             // add to local screenshots list
             const stat = fs.statSync(savePath);
+            // normalize header.deviceInfo and merge explicit header fields if provided
+            // Build deviceInfo from proxy header fields directly
+            let diProxy: any = {};
+            if (header && header.deviceInfo !== undefined && header.deviceInfo !== null) {
+              const rawHeader = header.deviceInfo;
+              if (typeof rawHeader === 'object') diProxy = { ...rawHeader, raw: rawHeader };
+              else {
+                try {
+                  const parsed = JSON.parse(String(rawHeader));
+                  if (typeof parsed === 'object' && parsed !== null) diProxy = { ...parsed, raw: parsed };
+                  else diProxy.raw = String(rawHeader);
+                } catch (_e) {
+                  diProxy.raw = String(rawHeader);
+                }
+              }
+            }
+            const proxyAllowed = ['platform', 'name', 'model', 'systemVersion', 'identifierForVendor', 'manufacturer', 'version', 'sdkInt', 'brand', 'device'];
+            for (const f of proxyAllowed) {
+              if (header && Object.prototype.hasOwnProperty.call(header, f) && header[f] !== undefined && header[f] !== null) {
+                if (f === 'sdkInt') {
+                  const n = Number(header[f]);
+                  if (!Number.isNaN(n)) diProxy[f] = n;
+                } else {
+                  diProxy[f] = header[f];
+                }
+              }
+            }
+
+            // Guard: strip obvious server health payloads from proxy deviceInfo.raw
+            try {
+              const rawp = (diProxy && (diProxy.raw ?? undefined)) as any;
+              if (rawp) {
+                if (typeof rawp === 'object' && rawp.service && rawp.status) {
+                  delete diProxy.raw;
+                } else if (typeof rawp === 'string' && rawp.includes('service: CrossShot')) {
+                  delete diProxy.raw;
+                }
+              }
+            } catch (_) {
+              // ignore
+            }
+
             const screenshot: ScreenshotMeta = {
               id: Date.now().toString(),
               filename,
               path: savePath,
-              deviceInfo: header.deviceInfo ?? 'Proxy Upload',
+              deviceInfo: diProxy,
               timestamp: new Date().toISOString(),
               size: stat.size,
             };
+            // Debug: if proxy deviceInfo is empty, log header keys to aid diagnosis
+            try {
+              if (!diProxy || (typeof diProxy === 'object' && Object.keys(diProxy).length === 0)) {
+                console.warn('Proxy upload: deviceInfo empty for file', filename, 'headerKeys=', Object.keys(header));
+              }
+            } catch (_) {}
             this.screenshots.push(screenshot);
             this.saveMetadata();
             this.onNewScreenshot?.([...this.screenshots]);

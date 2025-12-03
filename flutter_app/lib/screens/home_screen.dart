@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'qr_scanner_screen.dart';
+import 'gallery_picker_screen.dart';
 import '../providers/device_provider.dart';
 import '../services/mdns_service.dart';
 import '../services/screenshot_service.dart';
@@ -97,8 +98,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('CrossShot'),
+        title: const Text('Crossshot'),
         elevation: 2,
+        actions: [
+          IconButton(
+            tooltip: '打开相册',
+            icon: const Icon(Icons.photo),
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GalleryPickerScreen()));
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
