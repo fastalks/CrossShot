@@ -160,10 +160,15 @@ EOF
       fi
 
       if (cd "$FS_APP" && "${BUILD_IPA_CMD[@]}"); then
-        ipa="$FS_APP/build/ios/ipa/Runner.ipa"
-        if [ -f "$ipa" ]; then
-          cp "$ipa" "$RELEASE_DIR/app-ios-${build_name}_${build_num}.ipa"
-          echo "iOS IPA -> $RELEASE_DIR/app-ios-${build_name}_${build_num}.ipa"
+        # find any ipa produced
+        ipa_dir="$FS_APP/build/ios/ipa"
+        ipa_file=""
+        if [ -d "$ipa_dir" ]; then
+          ipa_file=$(ls "$ipa_dir"/*.ipa 2>/dev/null | head -n 1 || true)
+        fi
+        if [ -n "$ipa_file" ] && [ -f "$ipa_file" ]; then
+          cp "$ipa_file" "$RELEASE_DIR/app-ios-${build_name}_${build_num}.ipa"
+          echo "iOS IPA -> $RELEASE_DIR/app-ios-${build_name}_${build_num}.ipa (from $ipa_file)"
         else
           echo "IPA not found; iOS build may require codesign config or ExportOptions mismatch"
         fi
@@ -185,7 +190,8 @@ EOF
   # Electron build for current host
   if [ -d "$ROOT_DIR/electron_app" ] && command -v npm >/dev/null 2>&1; then
     echo "Building Electron for host platform..."
-    (cd "$ROOT_DIR/electron_app" && npm ci)
+    # Try clean install first; if lockfile out-of-sync, fallback to npm install
+    (cd "$ROOT_DIR/electron_app" && npm ci) || (echo "npm ci failed, running npm install" && cd "$ROOT_DIR/electron_app" && npm install)
     if (cd "$ROOT_DIR/electron_app" && npm run dist); then
       echo "Collecting electron installers from electron_app/out/make"
       if [ -d "$ROOT_DIR/electron_app/out/make" ]; then
