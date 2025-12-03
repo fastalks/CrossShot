@@ -23,11 +23,19 @@ jobs:
         run: |
           cd electron_app
           npm run dist
-      - name: Upload artifacts
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-dist
+          path: electron_app/dist/**/
+
+      - name: Create or update Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          files: electron_app/dist/**/*
+          artifacts: electron-dist
+          skipIfReleaseExists: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
     runs-on: windows-latest
@@ -45,11 +53,19 @@ jobs:
         run: |
           cd electron_app
           npm run dist
-      - name: Upload artifacts
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-dist
+          path: electron_app/dist/**/
+
+      - name: Create or update Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          files: electron_app/dist/**/*
+          artifacts: electron-dist
+          skipIfReleaseExists: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos:
     runs-on: macos-latest
@@ -67,8 +83,16 @@ jobs:
         run: |
           cd electron_app
           npm run dist
-      - name: Upload artifacts
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-dist
+          path: electron_app/dist/**/
+
+      - name: Create or update Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          files: electron_app/dist/**/*
+          artifacts: electron-dist
+          skipIfReleaseExists: true
+          token: ${{ secrets.GITHUB_TOKEN }}

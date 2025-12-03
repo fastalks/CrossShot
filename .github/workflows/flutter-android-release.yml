@@ -23,8 +23,16 @@ jobs:
         run: |
           cd flutter_app
           flutter build apk --release
-      - name: Upload APK to Release
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-apk
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Create or update Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          files: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          artifacts: flutter-apk
+          skipIfReleaseExists: true
+          token: ${{ secrets.GITHUB_TOKEN }}
