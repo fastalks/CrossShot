@@ -2,19 +2,37 @@ import type { Configuration } from 'webpack';
 
 import { rules } from './webpack.rules';
 import { plugins } from './webpack.plugins';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-export const mainConfig: Configuration = {
-  /**
-   * This is the main entry point for your application, it's the first file
-   * that runs in the main process.
-   */
-  entry: './src/index.ts',
-  // Put your normal webpack config below here
+// 替换 __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const mainConfig: Configuration = {
+  entry: './src/index.ts', // 根据你的实际入口文件调整
+  target: 'electron-main',
   module: {
-    rules,
+    rules: [
+      {
+        test: /\.ts$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'ts-loader',
+          options: {
+            transpileOnly: true
+          }
+        }
+      }
+    ]
   },
-  plugins,
   resolve: {
-    extensions: ['.js', '.ts', '.jsx', '.tsx', '.css', '.json'],
+    extensions: ['.ts', '.js']
   },
+  output: {
+    path: __dirname + '/.webpack/main',
+    filename: 'index.js'
+  }
 };
+
+export default mainConfig;

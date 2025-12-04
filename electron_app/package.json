@@ -1,7 +1,7 @@
 {
   "name": "cross_shot",
   "productName": "CrossShot",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "My Electron application description",
   "main": ".webpack/main",
   "scripts": {
@@ -10,7 +10,8 @@
     "make": "electron-forge make",
     "dist": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "build:linux": "electron-forge make --platform linux --arch x64"
   },
   "keywords": [],
   "author": {
@@ -62,5 +63,62 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "ws": "^8.18.3"
+  },
+  "config": {
+    "forge": {
+      "packagerConfig": {
+        "executableName": "cross_shot",
+        "name": "CrossShot"
+      },
+      "makers": [
+        {
+          "name": "@electron-forge/maker-dmg",
+          "platforms": ["darwin"]
+        },
+        {
+          "name": "@electron-forge/maker-zip", 
+          "platforms": ["darwin"]
+        },
+        {
+          "name": "@electron-forge/maker-deb",
+          "platforms": ["linux"],
+          "config": {
+            "options": {
+              "name": "cross_shot",
+              "bin": "cross_shot"
+            }
+          }
+        },
+        {
+          "name": "@electron-forge/maker-rpm",
+          "platforms": ["linux"]
+        },
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "platforms": ["win32"]
+        }
+      ],
+      "plugins": [
+        {
+          "name": "@electron-forge/plugin-webpack",
+          "config": {
+            "mainConfig": "./webpack.main.config.js",
+            "renderer": {
+              "config": "./webpack.renderer.config.js",
+              "entryPoints": [
+                {
+                  "html": "./src/index.html",
+                  "js": "./src/renderer.ts",
+                  "name": "main_window",
+                  "preload": {
+                    "js": "./src/preload.ts"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
   }
 }
