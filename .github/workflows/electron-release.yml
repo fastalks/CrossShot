@@ -34,14 +34,14 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: electron-dist
+          name: electron-dist-${{ runner.os }}-${{ github.run_id }}
           path: electron_app/out/make/**
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          artifacts: electron-dist
+          artifacts: electron-dist-${{ runner.os }}-${{ github.run_id }}
           skipIfReleaseExists: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -71,14 +71,14 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: electron-dist
+          name: electron-dist-${{ runner.os }}-${{ github.run_id }}
           path: electron_app/out/make/**
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          artifacts: electron-dist
+          artifacts: electron-dist-${{ runner.os }}-${{ github.run_id }}
           skipIfReleaseExists: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -109,13 +109,13 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: electron-dist
+          name: electron-dist-${{ runner.os }}-${{ github.run_id }}
           path: electron_app/out/make/**
 
       - name: Create or update Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          artifacts: electron-dist
+          artifacts: electron-dist-${{ runner.os }}-${{ github.run_id }}
           skipIfReleaseExists: true
           token: ${{ secrets.GITHUB_TOKEN }}

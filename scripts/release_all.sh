@@ -189,9 +189,40 @@ EOF
     echo "Not macOS — skipping iOS build"
   fi
 
-  # Electron: do not attempt to build here. If installers already exist in out/make, collect them and create DMG on macOS.
-  if [ -d "$ROOT_DIR/electron_app" ]; then
-    if [ -d "$ROOT_DIR/electron_app/out/make" ]; then
+  # Electron: optional build and collection. Set BUILD_ELECTRON=1 to enable building (npm ci/install + npm run dist).
+  ELECTRON_DIR="$ROOT_DIR/electron_app"
+  if [ -d "$ELECTRON_DIR" ]; then
+    # Optionally build Electron if requested
+    if command -v npm >/dev/null 2>&1; then
+      echo "Building Electron for host platform (BUILD_ELECTRON=1)..."
+      # Enforce reproducible installs: require npm ci to succeed. Do not fallback to npm install to avoid
+      # accidental dependency upgrades during CI. If npm ci fails, abort and surface the error so lockfile
+      # can be fixed and committed.
+      (cd "$ELECTRON_DIR" && npm ci) || { echo "ERROR: 'npm ci' failed in $ELECTRON_DIR. Aborting to avoid unintended dependency changes. Please fix package-lock.json and retry."; exit 1; }
+
+      dist_ok=0
+      max_retries=1
+      retry_delay=5
+      attempt=1
+      while [ $attempt -le $max_retries ]; do
+        echo "Running electron dist (attempt $attempt/$max_retries)..."
+        if (cd "$ELECTRON_DIR" && npm run dist); then
+          dist_ok=1
+          break
+        fi
+        echo "electron dist failed on attempt $attempt. Retrying in ${retry_delay}s..."
+        sleep $retry_delay
+        attempt=$((attempt+1))
+        retry_delay=$((retry_delay*2))
+      done
+      if [ "$dist_ok" -ne 1 ]; then
+        echo "Electron build failed after $max_retries attempts; proceeding to collection if any installers exist"
+      fi
+    fi
+
+    if [ -d "$ELECTRON_DIR/out/make" ]; then
+      echo "Collecting existing electron installers from electron_app/out/make"
+      echo "Processing electron installers in $ELECTRON_DIR/out/make"
       echo "Collecting existing electron installers from electron_app/out/make"
       echo "Processing electron installers in $ROOT_DIR/electron_app/out/make"
       while IFS= read -r -d '' file; do
@@ -255,9 +286,9 @@ EOF
           echo "hdiutil or unzip not available — cannot create dmg automatically"
         fi
       fi
-    else
-      echo "No electron installers found in out/make — skipping Electron collection"
-    fi
+      else
+        echo "No electron installers found in out/make — skipping Electron collection"
+      fi
   else
     echo "electron_app directory not found — skipping Electron collection"
   fi
@@ -289,6 +320,21 @@ echo "Version in use: $new (name=$build_name, number=$build_num)"
 
 sync_android_local_properties "$build_name" "$build_num"
 sync_ios_info_plist "$build_name" "$build_num"
+
+# Sync electron package.json version to match Flutter pubspec (use build_name without +build)
+sync_electron_package_json() {
+  local ver=$1
+  local pkg="$ROOT_DIR/electron_app/package.json"
+  if [ -f "$pkg" ]; then
+    # Use perl to safely replace the JSON version value in-place
+    perl -0777 -pe "s/\"version\"\s*:\s*\"[^\"]*\"/\"version\": \"$ver\"/s" -i "$pkg"
+    echo "Updated $pkg -> $ver"
+  else
+    echo "Warning: $pkg not found, skipping electron version sync"
+  fi
+}
+
+sync_electron_package_json "$build_name"
 
 do_builds "$build_name" "$build_num"
 

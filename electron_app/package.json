@@ -1,7 +1,7 @@
 {
   "name": "cross_shot",
   "productName": "CrossShot",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "My Electron application description",
   "main": ".webpack/main",
   "scripts": {
@@ -42,6 +42,7 @@
     "@vercel/webpack-asset-relocator-loader": "^1.7.3",
     "css-loader": "^6.11.0",
     "electron": "^30.0.8",
+    "ts-node": "^10.9.1",
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
     "fork-ts-checker-webpack-plugin": "^7.3.0",
