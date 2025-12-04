@@ -1,7 +1,7 @@
 {
   "name": "cross_shot",
   "productName": "CrossShot",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "My Electron application description",
   "main": ".webpack/main",
   "scripts": {
